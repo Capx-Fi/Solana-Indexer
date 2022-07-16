@@ -1,0 +1,19 @@
+{
+    "name": "solana-indexer",
+    "version": "0.0.1",
+    "description": "Solana Indexer for Capx Liquid on Solana",
+    "main": "indexer.js",
+    "scripts": {
+      "test": "echo \"Error: no test specified\" && exit 1"
+    },
+    "author": "Capx Tech Team",
+    "license": "MIT",
+    "dependencies": {
+      "@project-serum/anchor": "^0.25.0",
+      "@solana/web3.js": "^1.48.0",
+      "aws-sdk": "^2.1175.0",
+      "axios": "^0.27.2",
+      "object-hash": "^3.0.0"
+    }
+  }
+  
