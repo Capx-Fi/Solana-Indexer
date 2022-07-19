@@ -1,0 +1,4 @@
+To create zip file to upload to lambda directly
+"cd package && zip -r ../my-deployment-package.zip . && cd .. && zip -g my-deployment-package.zip lambda_function.py"
+
+The package folder contains pre compiled packages suitable for AWS Lambda's machines.
