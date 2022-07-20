@@ -1,4 +1,3 @@
-from ast import Return
 import json
 import os
 import boto3
@@ -137,20 +136,14 @@ def fetch_investor_dashboard(userAddress) :
 
 
 def lambda_handler(event, context):
-    print(event)
-    print(event["body"])
-    if (event["isBase64Encoded"]) :
-        event["body"] = json.loads(base64.b64decode(event["body"]))
-    else : 
-        event["body"] = json.loads((event["body"]))
-    print(event["body"]["user"])
     if (event["rawPath"] == "/investorDashboard"):
         return {
         'statusCode': 200,
-        'body': json.dumps(fetch_investor_dashboard(event["body"]["user"]))
+        'body': json.dumps(fetch_investor_dashboard(event["queryStringParameters"]["user"]))
     }
     elif (event["rawPath"] == "/projectOverview"):
         return {
         'statusCode': 200,
-        'body': json.dumps(fetch_project_overview(event["body"]["user"]))
+        'body': json.dumps(fetch_project_overview(event["queryStringParameters"]["user"]))
     }
+
