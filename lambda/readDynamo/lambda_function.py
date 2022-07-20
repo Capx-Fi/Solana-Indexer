@@ -5,7 +5,7 @@ import asyncio
 import requests
 import base64
 from datetime import datetime
-
+from boto3.dynamodb.conditions import Key
 
 
 
@@ -131,6 +131,27 @@ def fetch_investor_dashboard(userAddress) :
                 )
     print(returnList)
     return returnList
+
+def fetch_project_exists(projectID) :
+    dynamodb = boto3.resource('dynamodb')
+    table = dynamodb.Table(os.environ['PROJECT_TABLENAME'])
+    fe = Key('projectID').eq(projectID)
+    projectItems = table.scan(FilterExpression=fe)["Items"]
+    for item in projectItems :
+        return (
+            {
+                "data" : {
+                    "projectID" : item["projectID"],
+                    "projectName" : item["projectName"],
+                    "projectHash" : item["projectHash"]
+                },
+                "status" : True
+            })
+    return {
+        "status" : False,
+        "data" : {}
+    }
+
                 
 
 
@@ -139,11 +160,16 @@ def lambda_handler(event, context):
     if (event["rawPath"] == "/investorDashboard"):
         return {
         'statusCode': 200,
-        'body': json.dumps(fetch_investor_dashboard(event["queryStringParameters"]["user"]))
+        'body': (fetch_investor_dashboard(event["queryStringParameters"]["user"]))
     }
     elif (event["rawPath"] == "/projectOverview"):
         return {
         'statusCode': 200,
-        'body': json.dumps(fetch_project_overview(event["queryStringParameters"]["user"]))
+        'body': (fetch_project_overview(event["queryStringParameters"]["user"]))
+    }
+    elif (event["rawPath"] == "/checkProject"):
+        return {
+        'statusCode': 200,
+        'body': (fetch_project_exists(event["queryStringParameters"]["projectID"]))
     }
 
