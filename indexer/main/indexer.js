@@ -1,117 +1,107 @@
-
-const anchor = require("@project-serum/anchor");
-const { Program } = require("@project-serum/anchor");
-const { default: NodeWallet} = require("@project-serum/anchor/dist/cjs/nodewallet");
-const web3 = require("@solana/web3.js");
+const axios = require('axios');
+const { clusterApiUrl } = require("@solana/web3.js"); 
+const sleep = (time) => {
+    return new Promise((resolve) => setTimeout(resolve, Math.ceil(time * 1000)));
+};
 
 // Helper Functions
-const sendMessage = require("./sqs/sendMessage");
 const hash = require("object-hash");
+const sendMessage = require("./sqs/sendMessage");
 
-// Processing the Event Object
-const project = require("./utils/processNewProjectEvent");
-const createWVT = require("./utils/processCreateDerivativeEvent");
-const mintWVT = require("./utils/processMintDerivativeEvent");
-const burnWVT = require("./utils/processBurnDerivativeEvent");
-
-let idl = require("./idl/program.json");
-
-let connection = new web3.Connection(web3.clusterApiUrl('devnet'),'processed');
-let keyPair = anchor.web3.Keypair.generate();
-
-let nodeWallet = {payer: keyPair};
-let provider = new anchor.AnchorProvider(connection, nodeWallet, {commitment: "processed",});
-
-let program = new Program(idl, "5NbXrgnFeKfwpCPhpwFRrRZ8GqRCDpo94ohuHDBEPzdH", provider);
-
-async function _handleObject(eventObject) {
-    return {
-        event: "MyEvent",
-        data: eventObject.data.toString(10),
-        label: eventObject.label
+async function getSlot(_network, _commitment) {
+    var data = JSON.stringify({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSlot",
+        "params": [
+          {
+            "commitment": _commitment
+          }
+        ]
+    });
+    var config = {
+        method: 'post',
+        url: clusterApiUrl(_network),
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        data : data
     };
+    return axios(config)
+    .then(function (response) {
+        return response.data.result;
+    })
+    .catch(function (error) {
+        console.log(error);
+    });
 }
 
-const indexer = async() => {
-    await console.log("Indexer Running");
-
-    let[event, slot] = await new Promise(
-        (resolve, reject) => {
-            // Test Event
-            try {
-                program.addEventListener("MyEvent", async (event,slot) => {
-                    resolve([event, slot]);
-                    // Breaking the Event structure and creating the Object corresponding to the event
-                    let snsObject = await _handleObject(event);
-                    let snsObjectHash = hash(snsObject);
-                    await sendMessage(snsObject, snsObjectHash);
-                }); 
-            } catch (err) {
-                console.log("Error Indexing Event: MyEvent\n",err);
-            }
-            // Test Event
-            try {
-                program.addEventListener("MyOtherEvent", async (event,slot) => {
-                    resolve([event, slot]);
-                    console.log(event);
-                });
-            } catch (err) {
-                console.log("Error Indexing Event: MyOtherEvent\n",err);
-            }
-            // Project Creation Event
-            try {
-                program.addEventListener("NewProject", async (event,slot) => {
-                    resolve([event, slot]);
-                    // Breaking the Event structure and creating the Object corresponding to the event
-                    let snsObject = await project(event);
-                    let snsObjectHash = hash(snsObject);
-                    console.log("Project Object",snsObject);
-                    await sendMessage(snsObject, snsObjectHash);
-                }); 
-            } catch (err) {
-                console.log("Error Indexing Event: NewProject\n",err);
-            }
-            // Derivative Creation Event
-            try {
-                program.addEventListener("Derivative", async (event,slot) => {
-                    resolve([event, slot]);
-                    // Breaking the Event structure and creating the Object corresponding to the event
-                    let snsObject = await createWVT(event);
-                    let snsObjectHash = hash(snsObject);
-                    console.log("Derivative Object",snsObject);
-                    await sendMessage(snsObject, snsObjectHash);
-                }); 
-            } catch (err) {
-                console.log("Error Indexing Event: Derivative\n",err);
-            }
-            // Derivative Mint Event
-            try {
-                program.addEventListener("DerivativeMint", async (event,slot) => {
-                    resolve([event, slot]);
-                    // Breaking the Event structure and creating the Object corresponding to the event
-                    let snsObject = await mintWVT(event);
-                    let snsObjectHash = hash(snsObject);
-                    console.log("Derivative Mint Object",snsObject);
-                    await sendMessage(snsObject, snsObjectHash);
-                }); 
-            } catch (err) {
-                console.log("Error Indexing Event: DerivativeMint\n",err);
-            }
-            // Derivative Burn Event
-            try {
-                program.addEventListener("DerivativeBurn", async (event,slot) => {
-                    resolve([event, slot]);
-                    // Breaking the Event structure and creating the Object corresponding to the event
-                    let snsObject = await burnWVT(event);
-                    let snsObjectHash = hash(snsObject);
-                    console.log("Derivative Burn Object",snsObject);
-                    await sendMessage(snsObject, snsObjectHash);
-                }); 
-            } catch (err) {
-                console.log("Error Indexing Event: DerivativeBurn\n",err);
-            }
-        }
-    )
+async function getBlock(_network, _commitment, _slot) {
+    var data = JSON.stringify({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getBlock",
+        "params": [
+            _slot,
+          {
+            "encoding": "jsonParsed",
+            "transactionDetails": "full",
+            "rewards": false,
+            "commitment": _commitment
+          }
+        ]
+    });
+    var config = {
+        method: 'post',
+        url: clusterApiUrl(_network),
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        data : data
+    };
+    return axios(config)
+    .then(function (response) {
+        return response.data;
+    })
+    .catch(function (error) {
+        console.log(error);
+    });
 }
 
-indexer();
+function parseBlock(block, slot) {
+    // Get Transactions corresponding to this slot.
+    let txSignatures = [];
+    let logs = [];
+    block.transactions.map( async(transaction) => {
+        logs.push(transaction.meta.logMessages);
+        txSignatures.push(transaction.transaction.signatures);
+    });
+    logs = logs.join(",").split(",");
+    txSignatures = txSignatures.join(",").split(",");
+    return {
+        slot: slot,
+        blockHeight: block.blockHeight,
+        blockHash: block.blockhash,
+        blockTime: block.blockTime,
+        parentSlot: block.parentSlot,
+        transactions: txSignatures,
+        blockLogs: logs
+    }
+}
+
+const apiIndexer = async() => {
+    let slot = await getSlot("devnet","finalized");
+    let flag = true;
+    while(flag) {
+        console.log("Processing Slot", slot);
+        let block = await getBlock("devnet","finalized",slot);
+        let sqsObject = parseBlock(block.result, slot);
+        let sqsObjectHash = hash(sqsObject);
+        console.log(sqsObjectHash);
+        await sendMessage(sqsObject, sqsObjectHash);
+        await sleep(5);
+        slot+=1;
+    }
+}
+
+apiIndexer();
