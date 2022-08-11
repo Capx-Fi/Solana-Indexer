@@ -382,5 +382,5 @@ async function createTSconfig(answers) {
 }
 
 function installPackages(answers) {
-    execSync("cd "+answers.INDEXER_NAME+" && npm i");
+    execSync("cd "+answers.INDEXER_NAME+" && npm i --silent");
 }
