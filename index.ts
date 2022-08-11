@@ -7,9 +7,9 @@ const port = 3000;
 app.use(bodyParser.json())
 
 let updates = 0;
-let prevrepo : string = "";
+let prevRepos : string[] ;
 
-async function afterfunction() {
+async function afterFunction() {
 
 }
 
@@ -17,64 +17,89 @@ app.post('/' , async function (request: Request, response: Response, next: NextF
   let user : string;
   let repo : string;
   let branch : string = request.body.branch;
-  let ghlink : string = (request.body.link);
-  if (ghlink.startsWith("https://github.com")) {
-    ghlink = ghlink.slice(19);
-    if (ghlink.endsWith(".git")) {
-      ghlink = ghlink.slice(0,ghlink.length-4);
+  let GHLink : string = (request.body.link);
+  if (GHLink.startsWith("https://github.com")) {
+    GHLink = GHLink.slice(19);
+    if (GHLink.endsWith(".git")) {
+      GHLink = GHLink.slice(0,GHLink.length-4);
     }
-    if (ghlink.split("/").length == 2) {
-      [user , repo] = ghlink.split("/");
-    } else if (ghlink.split("/").length >= 4) {
-      let split = ghlink.split("/");
+    if (GHLink.split("/").length == 2) {
+      [user , repo] = GHLink.split("/");
+    } else if (GHLink.split("/").length >= 4) {
+      let split = GHLink.split("/");
       user = split[0];
       repo = split[1];
       branch = split.slice(3).join("/");
     } else {
-      response.status(400).send("Invalid GitHub link");
+      response.status(406).send({
+        error: "Invalid link",
+        statusCode : 406
+      });
       return;
     }
     console.log(branch)
-  } else if (ghlink.startsWith("git@github.com")) {
-    ghlink = ghlink.slice(15);
-    ghlink = ghlink.slice(0,ghlink.length-4);
-    [user , repo] = ghlink.split("/");
+  } else if (GHLink.startsWith("git@github.com")) {
+    GHLink = GHLink.slice(15);
+    GHLink = GHLink.slice(0,GHLink.length-4);
+    [user , repo] = GHLink.split("/");
   } else {
     response.status(400).send("Invalid GitHub link");
     return;
   }
 
-  if (updates > 0 && prevrepo.length > 0) {
-    execSync("cd tests && mv -R "+ prevrepo +" " + prevrepo + "_old");
+  console.log(updates,prevRepos,user,repo,branch);
+  
+  if (prevRepos.indexOf(repo) != -1) {
+    execSync("cd .. && mv "+ repo +" " + repo + "_old");
   }
 
   try {
     if (branch != undefined) {
       console.log(branch);
-      execSync("cd tests && git clone https://github.com/" + user + "/" + repo + " -b " + branch)  
+      execSync("cd .. && git clone https://github.com/" + user + "/" + repo + " -b " + branch)  
     } else {
-      execSync("cd tests && git clone https://github.com/" + user + "/" + repo)
+      execSync("cd .. && git clone https://github.com/" + user + "/" + repo)
     }
     updates += 1
-    prevrepo = repo;
+    prevRepos.push(repo);
 
-    afterfunction()
+    afterFunction()
 
     response.status(200).send(
       {
         "status": "success",
+        statusCode : 200
       }
     );
   } catch (error : any) {
     if (error.stderr.toString().includes("branch" + branch + " not found")) {
       console.log("Branch not found");
-      execSync("cd tests && mv -R "+ prevrepo + "_old" +" " + prevrepo );
-      response.status(406).send({error: "Branch not found"});
+      if (prevRepos.indexOf(repo) != -1) {
+        execSync("cd .. && mv "+ prevRepos + "_old" +" " + prevRepos );
+      }
+      response.status(406).send({error: "Branch not found",statusCode : 406});
       return
     } else if (error.stderr.toString().includes(user + "/" + repo + "/' not found")) {
       console.log("Repo doesn't exist or is private");
+      if (prevRepos.indexOf(repo) != -1) {
+        if (prevRepos.indexOf(repo+"_old") != -1) {
+          execSync("cd .. && rm -rf "+ repo +"_old");
+        }
+        execSync("cd .. && mv "+ repo + "_old" +" " + repo );
+      }
       response.status(406).send({
-        error: "Repo doesn't exist or is private"
+        error: "Repo doesn't exist or is private",
+        statusCode : 406
+      });
+      return
+    } else {
+      console.log("Unknown error");
+      if (prevRepos.indexOf(repo) != -1) {
+        execSync("cd .. && mv "+ prevRepos + "_old" +" " + prevRepos );
+      }
+      response.status(406).send({
+        error: error.stderr.toString(),
+        statusCode : 406
       });
       return
     }
@@ -86,11 +111,8 @@ app.post('/' , async function (request: Request, response: Response, next: NextF
 
 })
 
-// return json object
-// branch wd "/"
-// error handling properly
-// error code 406
-// get prev by ls
+
 app.listen(port, () => {
+  prevRepos = (execSync("cd .. && ls").toString().split("\n") as string[]).filter(x => x != "");
   console.log(`Application is running on port ${port}.`);
 });
