@@ -50,15 +50,15 @@ app.post('/' , async function (request: Request, response: Response, next: NextF
   console.log(updates,prevRepos,user,repo,branch);
   
   if (prevRepos.indexOf(repo) != -1) {
-    execSync("cd .. && mv "+ repo +" " + repo + "_old");
+    execSync("mv "+ repo +" " + repo + "_old");
   }
 
   try {
     if (branch != undefined) {
       console.log(branch);
-      execSync("cd .. && git clone https://github.com/" + user + "/" + repo + " -b " + branch)  
+      execSync("git clone https://github.com/" + user + "/" + repo + " -b " + branch)  
     } else {
-      execSync("cd .. && git clone https://github.com/" + user + "/" + repo)
+      execSync("git clone https://github.com/" + user + "/" + repo)
     }
     updates += 1
     prevRepos.push(repo);
@@ -75,30 +75,30 @@ app.post('/' , async function (request: Request, response: Response, next: NextF
     if (error.stderr.toString().includes("branch" + branch + " not found")) {
       console.log("Branch not found");
       if (prevRepos.indexOf(repo) != -1) {
-        execSync("cd .. && mv "+ prevRepos + "_old" +" " + prevRepos );
+        execSync("mv "+ prevRepos + "_old" +" " + prevRepos );
       }
       response.status(406).send({error: "Branch not found",statusCode : 406});
       return
     } else if (error.stderr.toString().includes(user + "/" + repo + "/' not found")) {
-      console.log("Repo doesn't exist or is private");
+      console.log("Repository not found or Private.");
       if (prevRepos.indexOf(repo) != -1) {
         if (prevRepos.indexOf(repo+"_old") != -1) {
-          execSync("cd .. && rm -rf "+ repo +"_old");
+          execSync("rm -rf "+ repo +"_old");
         }
-        execSync("cd .. && mv "+ repo + "_old" +" " + repo );
+        execSync("mv "+ repo + "_old" +" " + repo );
       }
       response.status(406).send({
-        error: "Repo doesn't exist or is private",
+        error: "Repository not found or Private.",
         statusCode : 406
       });
       return
     } else {
       console.log("Unknown error");
       if (prevRepos.indexOf(repo) != -1) {
-        execSync("cd .. && mv "+ prevRepos + "_old" +" " + prevRepos );
+        execSync("mv "+ prevRepos + "_old" +" " + prevRepos );
       }
       response.status(406).send({
-        error: error.stderr.toString(),
+        error: "Repository not found or Private.",
         statusCode : 406
       });
       return
@@ -113,6 +113,6 @@ app.post('/' , async function (request: Request, response: Response, next: NextF
 
 
 app.listen(port, () => {
-  prevRepos = (execSync("cd .. && ls").toString().split("\n") as string[]).filter(x => x != "");
+  prevRepos = (execSync("ls").toString().split("\n") as string[]).filter(x => x != "");
   console.log(`Application is running on port ${port}.`);
 });
