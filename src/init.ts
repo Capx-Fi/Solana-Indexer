@@ -258,11 +258,11 @@ async function generateProject(answers) {
     // fs.openSync("./"+answers.INDEXER_NAME+"/src/mappings.js", 'w');
     createEntitiesYaml(answers);
     createMapping(answers,data["dataSources"][0].mapping.eventHandlers);
-    if(!fs.existsSync("./"+answers.INDEXER_NAME+"/package")) {
-        fs.mkdirSync("./"+answers.INDEXER_NAME+"/package");
-    }
-    fs.openSync("./"+answers.INDEXER_NAME+"/package/generator.ts", 'w');
-    fs.copyFileSync(__dirname + "/generator.ts", "./"+answers.INDEXER_NAME+"/package/generator.ts");
+    // if(!fs.existsSync("./"+answers.INDEXER_NAME+"/package")) {
+    //     fs.mkdirSync("./"+answers.INDEXER_NAME+"/package");
+    // }
+    // fs.openSync("./"+answers.INDEXER_NAME+"/package/generator.ts", 'w');
+    // fs.copyFileSync(__dirname + "/generator.ts", "./"+answers.INDEXER_NAME+"/package/generator.ts");
     await createNPM(answers);
     await createTSconfig(answers);
     await installPackages(answers);

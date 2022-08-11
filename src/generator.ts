@@ -195,5 +195,6 @@ export async function generator() {
     
     
     logger.close();
+    console.log("Build Successful");
     
 }
