@@ -274,3 +274,11 @@ logger.write("\n}")
 
 
 logger.close();
+
+
+let progName = doc.dataSources[0].source.idl
+let JSONstring = fs.readFileSync("./idls/" + progName + ".json" )
+logger = fs.createWriteStream("./idls/" + progName + ".ts")
+logger.write("export type " + progName + " = " + JSONstring)
+logger.write("\n\nexport const IDL: " + progName + " = " + JSONstring)
+logger.close()
