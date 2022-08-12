@@ -3,8 +3,10 @@ const { clusterApiUrl } = require("@solana/web3.js");
 
 // Helper Functions
 const checkHash = require("./utils/checkHashWithAgent");
-const hash = require("object-hash");
+const checkBlock = require("./dynamo/getItem");
+const insertBlock = require("./dynamo/insertItem");
 
+const hash = require("object-hash");
 const sleep = (time) => {
     return new Promise((resolve) => setTimeout(resolve, Math.ceil(time * 1000)));
 };
@@ -73,34 +75,38 @@ function parseBlock(block, slot) {
     // Get Transactions corresponding to this slot.
     let txSignatures = [];
     let logs = [];
-    block.transactions.map( async(transaction) => {
-        logs.push(transaction.meta.logMessages);
-        txSignatures.push(transaction.transaction.signatures);
+    block?.transactions.map( async(transaction) => {
+        logs.push(transaction?.meta?.logMessages);
+        txSignatures.push(transaction?.transaction?.signatures);
     });
     logs = logs.join(",").split(",");
     txSignatures = txSignatures.join(",").split(",");
     return {
+        event: "Block",
         slot: slot,
-        blockHeight: block.blockHeight,
-        blockHash: block.blockhash,
-        blockTime: block.blockTime,
-        parentSlot: block.parentSlot,
+        blockHeight: block?.blockHeight,
+        blockHash: block?.blockhash,
+        blockTime: block?.blockTime,
+        parentSlot: block?.parentSlot,
         transactions: txSignatures,
         blockLogs: logs
     }
 }
 
 const apiIndexer = async() => {
-    let slot = await getSlot("devnet","finalized");
+    let slot = 148098973 //await getSlot("devnet","finalized");
     let flag = true;
     while(flag) {
         console.log("Processing Slot", slot);
-        let block = await getBlock("devnet","finalized",slot);
-        let sqsObject = parseBlock(block.result, slot);
-        let sqsObjectHash = hash(sqsObject);
-        console.log(sqsObjectHash);
-        await sleep(5); // 5 second Sleep.
-        await checkHash(sqsObject, sqsObjectHash);
+        let ifExists = await checkBlock(slot);
+        if(!ifExists.status){
+            let block = await getBlock("devnet","finalized",slot);
+            let slotObject = parseBlock(block?.result, slot);
+            // let slotObjectHash = hash(slotObject);
+            // console.log(slotObjectHash);
+            await insertBlock(slotObject);
+            await sleep(2);
+        }
         slot+=1;
     }
 }

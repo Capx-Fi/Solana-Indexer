@@ -6,7 +6,8 @@ const sleep = (time) => {
 
 // Helper Functions
 const hash = require("object-hash");
-const sendMessage = require("./sqs/sendMessage");
+const checkBlock = require("./dynamo/getItem");
+const insertBlock = require("./dynamo/insertItem");
 
 async function getSlot(_network, _commitment) {
     var data = JSON.stringify({
@@ -72,36 +73,38 @@ function parseBlock(block, slot) {
     // Get Transactions corresponding to this slot.
     let txSignatures = [];
     let logs = [];
-    block.transactions.map( async(transaction) => {
-        logs.push(transaction.meta.logMessages);
-        txSignatures.push(transaction.transaction.signatures);
+    block?.transactions.map( async(transaction) => {
+        logs.push(transaction?.meta?.logMessages);
+        txSignatures.push(transaction?.transaction?.signatures);
     });
     logs = logs.join(",").split(",");
     txSignatures = txSignatures.join(",").split(",");
     return {
         slot: slot,
-        blockHeight: block.blockHeight,
-        blockHash: block.blockhash,
-        blockTime: block.blockTime,
-        parentSlot: block.parentSlot,
+        blockHeight: block?.blockHeight,
+        blockHash: block?.blockhash,
+        blockTime: block?.blockTime,
+        parentSlot: block?.parentSlot,
         transactions: txSignatures,
         blockLogs: logs
     }
 }
 
 const apiIndexer = async() => {
-    let slot = await getSlot("devnet","finalized");
+    let slot = 148098974 //await getSlot("devnet","finalized");
     let flag = true;
     while(flag) {
         console.log("Processing Slot", slot);
-        let block = await getBlock("devnet","finalized",slot);
-        let sqsObject = parseBlock(block.result, slot);
-        let sqsObjectHash = hash(sqsObject);
-        console.log(sqsObjectHash);
-        await sendMessage(sqsObject, sqsObjectHash);
-        await sleep(5);
+        let ifExists = await checkBlock(slot);
+        if(!ifExists.status){
+            let block = await getBlock("devnet","finalized",slot);
+            let slotObject = parseBlock(block?.result, slot);
+            // let slotObjectHash = hash(slotObject);
+            // console.log(slotObjectHash);
+            await insertBlock(slotObject);
+            await sleep(2);
+        }
         slot+=1;
     }
 }
-
 apiIndexer();
