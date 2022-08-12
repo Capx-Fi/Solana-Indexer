@@ -1,0 +1,66 @@
+import * as anchor from "@project-serum/anchor";
+import {
+    Program,
+    EventParser
+} from "@project-serum/anchor";
+import {
+    Connection,
+    PublicKey,
+    clusterApiUrl
+} from "@solana/web3.js";
+import { IDL } from "../idls/::::PROGRAM_NAME";
+import NodeWallet from "@project-serum/anchor/dist/cjs/nodewallet";
+
+let connection = new Connection(clusterApiUrl('::::NETWORK'),"finalized");
+let keyPair = anchor.web3.Keypair.generate();
+let nodeWallet = new NodeWallet(keyPair);
+
+let provider = new anchor.AnchorProvider(connection, nodeWallet, {commitment: "finalized",});
+
+let program = new Program( IDL , "::::PROGRAM_ID", provider);
+let eventParser = new EventParser( new PublicKey("::::PROGRAM_ID"), program.coder);
+
+// AWS Config
+import * as AWS from "aws-sdk";
+// Set the region 
+AWS.config.update({region: 'us-east-1'});
+
+// Create the DynamoDB service object
+var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
+
+async function getBlockDetails(slot:number) {
+    let logs : string[] = [];
+    var params = {
+        TableName: '::::NETWORK-blocks',
+        Key: {
+          'slot': {N: slot.toString()}
+        },
+    };
+    // Call DynamoDB to read the item from the table
+    try {
+        let data = await ddb.getItem(params).promise();
+        console.log("Success");
+        data.Item?.blockLogs.L?.map((log) => {
+            if (log.S) {
+                logs.push(log.S);
+            }
+        })
+    } catch (error) {
+        console.log("Error", error);
+    }
+    return logs;
+}
+
+const getEventObject = async(slot: number) => {
+    let flag = true;
+    while(flag){
+        let logs = await getBlockDetails(slot);
+        for (const _event of eventParser.parseLogs(logs)){
+            console.log("Event",_event);
+        }
+        slot += 1;
+        flag = false;
+    }
+}
+
+getEventObject(::::START_SLOT);

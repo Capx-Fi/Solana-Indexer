@@ -73,6 +73,7 @@ interface yamlInterface {
             source : {
                 programId : string;
                 idl : string;
+                startBlock : number;
             };
             mapping : {
                 kind : string;
@@ -231,11 +232,39 @@ logger.write("}\n")
 
 
 logger.close();
+let progName = doc.dataSources[0].source.idl
+let JSONstring = fs.readFileSync("../idls/" + progName + ".json" )
+logger = fs.createWriteStream("../idls/" + progName + ".ts")
+logger.write("export type " + progName + " = " + JSONstring)
+logger.write("\n\nexport const IDL: " + progName + " = " + JSONstring)
+logger.close()
 
-logger  = fs.createWriteStream('../generated/EventRouter.ts', {
+
+
+// network
+// program id
+// startslot
+// program name
+
+function replaceAll(string : string, search : string, replace : string) {
+    return string.split(search).join(replace);
+  }
+
+  logger  = fs.createWriteStream('../generated/EventRouter.ts', {
     flags: 'a'
 })
 
+let progID = doc.dataSources[0].source.programId
+let network = doc.dataSources[0].network
+let startslot = doc.dataSources[0].source.startBlock
+
+let indexString : string = fs.readFileSync("./index.txt" ).toString()
+indexString = replaceAll(indexString, "::::PROGRAM_NAME", progName)
+indexString = replaceAll(indexString, "::::PROGRAM_ID", progID)
+indexString = replaceAll(indexString, "::::NETWORK", network)
+indexString = replaceAll(indexString, "::::START_SLOT", startslot.toString())
+logger.write(indexString)
+logger.write("\n\n\n")
 
 logger.write("import {")
 for (let index = 0; index < eventList.length; index++) {
@@ -251,9 +280,6 @@ for (let index = 0; index < eventList.length; index++) {
 }
 logger.write("\n} from './Interfaces';\n\n")
 
-logger.write("import { PublicKey } from \"@solana/web3.js\";\n")
-logger.write("import { BN } from \"@project-serum/anchor\";\n\n\n")
-
 logger.write("function handleEvents(json : string) : void {")
 logger.write("\n\tlet params;")
 logger.write("\n\tlet event : any = JSON.parse(json);")
@@ -261,12 +287,7 @@ logger.write("\n\tswitch (event.name) {")
 for (let index = 0; index < eventList.length; index++) {
     const element = eventList[index];
     logger.write("\n\t\tcase \""+element["name"]+"\":")
-    for (let index = 0; index < element["params"].length; index++) {
-        const element1 = element["params"][index];
-        logger.write("\n\t\t\tparams."+element1["name"]+" = event.params."+element1["name"]+" as " + mapper.get(element1["type"]) +";")
-    }
-    logger.write("\n\t\t\tparams = event[\"params\"] as " + element["name"].replace(/\s/g, "") + ";")
-    logger.write("\n\t\t\t"+element["handler"]+"(params);")
+    logger.write("\n\t\t\t"+element["handler"]+"(event[\"params\"] as "+ element["name"].replace(/\s/g, "") + ");")
     logger.write("\n\t\t\tbreak;")
 }
 logger.write("\n\t}")
@@ -276,9 +297,4 @@ logger.write("\n}")
 logger.close();
 
 
-let progName = doc.dataSources[0].source.idl
-let JSONstring = fs.readFileSync("./idls/" + progName + ".json" )
-logger = fs.createWriteStream("./idls/" + progName + ".ts")
-logger.write("export type " + progName + " = " + JSONstring)
-logger.write("\n\nexport const IDL: " + progName + " = " + JSONstring)
-logger.close()
+
