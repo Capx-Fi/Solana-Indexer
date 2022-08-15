@@ -1,0 +1,17 @@
+FROM node:lts-alpine
+
+WORKDIR /home/node/app
+
+RUN apk update
+
+COPY package.json ./
+
+RUN npm i
+
+RUN npm i -g ts-node
+
+COPY . .
+
+RUN ts-node generator.ts &
+
+CMD ["ts-node", "generated/EventRouter.ts"]
