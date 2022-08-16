@@ -8,7 +8,7 @@ import {
     PublicKey,
     clusterApiUrl
 } from "@solana/web3.js";
-import { IDL } from "../idls/::::PROGRAM_NAME";
+import { IDL } from "../idls/::::PROGRAM_NAME_ts";
 import NodeWallet from "@project-serum/anchor/dist/cjs/nodewallet";
 
 let connection = new Connection(clusterApiUrl('::::NETWORK'),"finalized");
@@ -57,6 +57,11 @@ const getEventObject = async(slot: number) => {
         let logs = await getBlockDetails(slot);
         for (const _event of eventParser.parseLogs(logs)){
             console.log("Event",_event);
+            let eventObj = {
+                name : _event.name,
+                params : _event.data
+            }
+            handleEvents(eventObj)
         }
         slot += 1;
         flag = false;

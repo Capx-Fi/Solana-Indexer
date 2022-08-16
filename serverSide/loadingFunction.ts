@@ -1,8 +1,8 @@
 // FUNCTION TO LOAD AN ENTITY FROM PRIMARY KEY
 
 const AWS = require('aws-sdk');
-AWS.config.update({region: 'US-EAST-1'});
-var ddb = new AWS.DynamoDB();
+AWS.config.update({region: 'us-east-1'});
+var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
 
 
 export async function loader(entityName : string,primId : any) : Promise<null|object> {

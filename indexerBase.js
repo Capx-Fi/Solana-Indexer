@@ -1,8 +1,6 @@
-// MAIN SERVER TO MANAGE ALL INSTANCE CREATION DELETION AND UPDATING
-
 const AWS = require('aws-sdk');
-AWS.config.update({region: 'US-EAST-1'});
 var ddb = new AWS.DynamoDB();
+var crypto = require('crypto');
 
 function makeid(length = 64) {
     var result           = '';
@@ -15,21 +13,24 @@ function makeid(length = 64) {
    return result;
 }
 
-interface parsedEvent {
-    name: string;
-    params: [
-        {
-            "name": string;
-            "type": string;
-        }
-    ];
-    handler: string;
+function makeHashID(name , authcode) {
+    const hash = crypto.createHash('sha256').update(name+authcode).digest('hex');
+    return hash
 }
 
+// interface parsedEvent {
+//     name: string;
+//     params: [
+//         {
+//             "name": string;
+//             "type": string;
+//         }
+//     ];
+//     handler: string;
+// }
 
-function parseEventString(params : {event : string; handler : string;}) {
-    const event = params.event;
-    const handler = params.handler;
+
+function parseEventString(event, handler) {
     const eventName = event.split("(")[0];
     const eventParams = event.split("(")[1].split(")")[0];
     const eventParamsArray = eventParams.split(",");
@@ -50,7 +51,7 @@ function parseEventString(params : {event : string; handler : string;}) {
     
 }
 
-let mapper : Map<string,string> = new Map<string,string> ([
+let mapper = new Map ([
     ["publicKey" , "S"],
     ["bool" , "S"],
     ["string" , "S"],
@@ -69,58 +70,58 @@ let mapper : Map<string,string> = new Map<string,string> ([
     ["i128" , "N"],
 ])
 
-interface yamlInterface {
-    indexer : string;
-    schema : {
-        file: string;
-    };
-    dataSources : [
-        {
-            kind : string;
-            name : string;
-            network : string;
-            source : {
-                programId : string;
-                idl : string;
-            };
-            mapping : {
-                kind : string;
-                entities : [
-                    string
-                ];
-                idls : [
-                    {
-                        name : string;
-                        file : string;
-                    }
-                ];
-                file : string;
-                eventHandlers : [
-                    {
-                        event : string;
-                        handler : string;
-                    }
-                ]
-            }
-        }
-    ],
-    entities : [
-        {
-            name : string;
-            params : [
-                {
-                    name : string;
-                    type : string;
-                    primary : boolean;
-                }
-            ]
-        }
-    ]
-}
+// interface yamlInterface {
+//     indexer : string;
+//     schema : {
+//         file: string;
+//     };
+//     dataSources : [
+//         {
+//             kind : string;
+//             name : string;
+//             network : string;
+//             source : {
+//                 programId : string;
+//                 idl : string;
+//             };
+//             mapping : {
+//                 kind : string;
+//                 entities : [
+//                     string
+//                 ];
+//                 idls : [
+//                     {
+//                         name : string;
+//                         file : string;
+//                     }
+//                 ];
+//                 file : string;
+//                 eventHandlers : [
+//                     {
+//                         event : string;
+//                         handler : string;
+//                     }
+//                 ]
+//             }
+//         }
+//     ],
+//     entities : [
+//         {
+//             name : string;
+//             params : [
+//                 {
+//                     name : string;
+//                     type : string;
+//                     primary : boolean;
+//                 }
+//             ]
+//         }
+//     ]
+// }
 
 
 // PRE CREATION
-export async function createAuthCode(username : string) {
+async function createAuthCode(username) {
     try {
         const authCode = makeid();
     const params = {
@@ -138,22 +139,20 @@ export async function createAuthCode(username : string) {
 }
 
 //PRE CREATION
-export async function createNewProject(name : string , gh : string , desc : string, username : string, authCode : string) {
+async function createNewProject(name , gh , desc , username,authCode) {
     let params1 = {
-        tableName : 'authCodes',
-        key: {
-            username: {S: username}
-        },
-        attributeValues: {
-            authCode: {S: authCode}
+        TableName : 'authCodes',
+        Key: {
+            username : {S: username}
         }
     }
+    
     let authCodeFromDb = await ddb.getItem(params1).promise();
-    if (authCodeFromDb.Item.authCode.s === authCode) {
+    if (authCodeFromDb.Item.authCode.S !== authCode) {
         throw new Error("User not Authorized");
     }
 
-    let projid = makeid();
+    let projid = makeHashID(name,authCode);
     let params = {
         TableName: 'indexers',
         Item: {
@@ -161,7 +160,7 @@ export async function createNewProject(name : string , gh : string , desc : stri
                 S: projid
             },
             "authCode" : {
-                S: authCodeFromDb.Item.authCode.S
+                S: authCode
             },
             'name': {
                 S: name
@@ -206,8 +205,28 @@ export async function createNewProject(name : string , gh : string , desc : stri
     }
 }
 
+// Verify if projid exists
+async function verifyProjIdExistence(projid) {
+    let params1 = {
+            TableName: 'indexers',
+            Key: {
+                'id': {
+                    S: projid
+                }
+            }
+        }
+
+        let indexer = await ddb.getItem(params1).promise();
+        
+        if (indexer.Item != null) {
+            return true
+        } else {
+            return false
+        }
+}
+
 // CREATION
-export async function createProject(indexerYAML : object,projid : string,authCode : string) {
+async function createProject(indexerYAML,projid,authCode) {
     try {
         let params1 = {
             TableName: 'indexers',
@@ -221,10 +240,13 @@ export async function createProject(indexerYAML : object,projid : string,authCod
         let indexer = await ddb.getItem(params1).promise();
 
         if (indexer.Item.authCode.S !== authCode) {
-            return ("Invalid auth code");
+            return {
+                "indexer" : indexer,
+                "authCode" : authCode
+            };
         }
 
-        let indexerYAMLParsed = indexerYAML as yamlInterface;
+        let indexerYAMLParsed = indexerYAML;
 
         let entityList = indexerYAMLParsed["entities"];
 
@@ -232,7 +254,7 @@ export async function createProject(indexerYAML : object,projid : string,authCod
             const element = entityList[index];
             let params = {
                 "TableName": projid + "_" + element["name"],
-                "AttributeDefinitions": element.params.map(param => {
+                "AttributeDefinitions": element.params.filter(param => param.primary).map(param => {
                     return {
                         AttributeName: param.name,
                         AttributeType: mapper.get(param.type)
@@ -243,7 +265,11 @@ export async function createProject(indexerYAML : object,projid : string,authCod
                         AttributeName: param.name,
                         KeyType: "HASH"
                     }
-                })
+                }),
+                ProvisionedThroughput: {
+        ReadCapacityUnits: 10,
+        WriteCapacityUnits: 10
+    }
             }
             
             await ddb.createTable(params).promise();
@@ -257,7 +283,7 @@ export async function createProject(indexerYAML : object,projid : string,authCod
                     "S": projid
                 }
             },
-            "UpdateExpression": "set indexer = :i, status = :s, error = :e",
+            "UpdateExpression": "SET #in = :i , #st = :s , #er = :e",
             "ExpressionAttributeValues": {
                 ":i": {
                     "S": indexerYAMLString
@@ -268,6 +294,11 @@ export async function createProject(indexerYAML : object,projid : string,authCod
                 ":e": {
                     "S": ""
                 }
+            },
+            ExpressionAttributeNames : {
+                "#in" : "indexer",
+                "#st" : "status",
+                "#er" : "error"
             }
         }
 
@@ -276,11 +307,11 @@ export async function createProject(indexerYAML : object,projid : string,authCod
         let params = {
             "TableName": "indexers",
             "Key": {
-                "projid": {
+                "id": {
                     "S": projid
                 }
             },
-            "UpdateExpression": "set status = :s, error = :e",
+            "UpdateExpression": "SET #st = :s, #er = :e",
             "ExpressionAttributeValues": {
                 ":s": {
                     "S": "Error"
@@ -288,15 +319,22 @@ export async function createProject(indexerYAML : object,projid : string,authCod
                 ":e": {
                     "S": error.message
                 }
+            },
+            ExpressionAttributeNames : {
+                "#st" : "status",
+                "#er" : "error"
             }
+            
         }
 
         await ddb.updateItem(params).promise();
+        
+        return error.message
     }
 }
 
 // UPDATE
-export async function updateProject(projid : string,newIndexerYAML : object,authCode : string) {
+async function updateProject(projid ,newIndexerYAML,authCode) {
     try {
         let params1 = {
             TableName: 'indexers',
@@ -313,19 +351,19 @@ export async function updateProject(projid : string,newIndexerYAML : object,auth
             return ("Invalid auth code");
         }
 
-        let indexerYAMLParsed = newIndexerYAML as yamlInterface;
+        let indexerYAMLParsed = newIndexerYAML;
         let entityList = indexerYAMLParsed["entities"];
 
         let oldIndexerYAMLResponse = await ddb.getItem({
             "TableName": "indexers",
             "Key": {
-                "projid": {
+                "id": {
                     "S": projid
                 }
             }
-        });
+        }).promise();
 
-        let oldIndexerYAML = JSON.parse(oldIndexerYAMLResponse.Item.indexer.S) as yamlInterface;
+        let oldIndexerYAML = JSON.parse(oldIndexerYAMLResponse.Item.indexer.S);
 
         let oldEntityList = oldIndexerYAML["entities"];
         for (let index = 0; index < oldEntityList.length; index++) {
@@ -334,13 +372,14 @@ export async function updateProject(projid : string,newIndexerYAML : object,auth
                 "TableName": projid + "_" + element["name"],
             }
             await ddb.deleteTable(params).promise();
+            await ddb.waitFor("tableNotExists",params).promise()
         }
 
         for (let index = 0; index < entityList.length; index++) {
             const element = entityList[index];
             let params = {
                 "TableName": projid + "_" + element["name"],
-                "AttributeDefinitions": element.params.map(param => {
+                "AttributeDefinitions": element.params.filter(param => param.primary).map(param => {
                     return {
                         AttributeName: param.name,
                         AttributeType: mapper.get(param.type)
@@ -351,7 +390,11 @@ export async function updateProject(projid : string,newIndexerYAML : object,auth
                         AttributeName: param.name,
                         KeyType: "HASH"
                     }
-                })
+                }),
+                ProvisionedThroughput: {
+        ReadCapacityUnits: 10,
+        WriteCapacityUnits: 10
+    }
             }
             
             await ddb.createTable(params).promise();
@@ -361,7 +404,7 @@ export async function updateProject(projid : string,newIndexerYAML : object,auth
         let params = {
             "TableName": "indexers",
             "Key": {
-                "projid": {
+                "id": {
                     "S": projid
                 }
             },
@@ -378,11 +421,11 @@ export async function updateProject(projid : string,newIndexerYAML : object,auth
         let params = {
             "TableName": "indexers",
             "Key": {
-                "projid": {
+                "id": {
                     "S": projid
                 }
             },
-            "UpdateExpression": "set status = :s, error = :e",
+            "UpdateExpression": "SET #st = :s, #er = :e",
             "ExpressionAttributeValues": {
                 ":s": {
                     "S": "Error"
@@ -390,15 +433,22 @@ export async function updateProject(projid : string,newIndexerYAML : object,auth
                 ":e": {
                     "S": error.message
                 }
+            },
+            ExpressionAttributeNames : {
+                "#st" : "status",
+                "#er" : "error"
             }
+            
         }
-        
+
         await ddb.updateItem(params).promise();
+        
+        return error.message
     }
 }
 
 // DELETE
-export async function deleteProject(projid : string,authCode : string) {
+async function deleteProject(projid ,authCode ) {
     let params1 = {
         TableName: 'indexers',
         Key: {
@@ -414,16 +464,7 @@ export async function deleteProject(projid : string,authCode : string) {
         return ("Invalid auth code");
     }
 
-    let indexerYAMLResponse = await ddb.getItem({
-        "TableName": "indexers",
-        "Key": {
-            "projid": {
-                "S": projid
-            }
-        }
-    });
-
-    let indexerYAML = JSON.parse(indexerYAMLResponse.Item.indexer.S) as yamlInterface;
+    let indexerYAML = JSON.parse(indexer.Item.indexer.S) ;
 
     let entityList = indexerYAML["entities"];
     for (let index = 0; index < entityList.length; index++) {
@@ -437,7 +478,7 @@ export async function deleteProject(projid : string,authCode : string) {
     let params = {
         "TableName": "indexers",
         "Key": {
-            "projid": {
+            "id": {
                 "S": projid
             }
         }
@@ -446,6 +487,29 @@ export async function deleteProject(projid : string,authCode : string) {
     await ddb.deleteItem(params).promise();
 }
 
-// gqAkydaLyJ5rZjnl9bZYCrl811bGe4MGpcuHZii1j4Je0Xr2ClRKCzmn4RdqUSvK
-
-// qDfXHmD44H6RUBaOFnEJ6MGuL5LYAhLfWrUKmXaqphBdkxqs1twsY97LtYBo1Bp5
+exports.handler = async (event) => {
+    let body = JSON.parse(event["body"])
+    let returnobj;
+    switch (event["path"]) {
+        case "/createauthcode" :
+            returnobj = await createAuthCode(body.username)
+            break;
+        case "/createnewproject":
+            returnobj = await createNewProject(body.name,body.gh,body.desc,body.username,body.authCode)
+            break;
+        case "/createproject" :
+            returnobj = await createProject(JSON.parse(body.indexerYAML),body.projid,body.authCode)
+            break;
+        case "/updateproject":
+            returnobj = await updateProject(body.projid,JSON.parse(body.newIndexerYAML) ,body.authCode)
+            break;
+        case "/deleteproject" :
+            returnobj = await deleteProject(body.projid,body.authCode)
+            break;
+    }
+    const response = {
+        statusCode: 200,
+        body: JSON.stringify(returnobj),
+    };
+    return response;
+};

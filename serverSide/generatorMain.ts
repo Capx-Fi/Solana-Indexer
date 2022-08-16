@@ -234,7 +234,7 @@ logger.write("}\n")
 logger.close();
 let progName = doc.dataSources[0].source.idl
 let JSONstring = fs.readFileSync("../idls/" + progName + ".json" )
-logger = fs.createWriteStream("../idls/" + progName + ".ts")
+logger = fs.createWriteStream("../idls/" + progName + "_ts.ts")
 logger.write("export type " + progName + " = " + JSONstring)
 logger.write("\n\nexport const IDL: " + progName + " = " + JSONstring)
 logger.close()
@@ -254,18 +254,6 @@ function replaceAll(string : string, search : string, replace : string) {
     flags: 'a'
 })
 
-let progID = doc.dataSources[0].source.programId
-let network = doc.dataSources[0].network
-let startslot = doc.dataSources[0].source.startBlock
-
-let indexString : string = fs.readFileSync("./index.txt" ).toString()
-indexString = replaceAll(indexString, "::::PROGRAM_NAME", progName)
-indexString = replaceAll(indexString, "::::PROGRAM_ID", progID)
-indexString = replaceAll(indexString, "::::NETWORK", network)
-indexString = replaceAll(indexString, "::::START_SLOT", startslot.toString())
-logger.write(indexString)
-logger.write("\n\n\n")
-
 logger.write("import {")
 for (let index = 0; index < eventList.length; index++) {
     const element = eventList[index];
@@ -279,10 +267,19 @@ for (let index = 0; index < eventList.length; index++) {
     logger.write("\n\t"+ element["name"].replace(/\s/g, "") + ",")
 }
 logger.write("\n} from './Interfaces';\n\n")
+let progID = doc.dataSources[0].source.programId
+let network = doc.dataSources[0].network
+let startslot = doc.dataSources[0].source.startBlock
 
-logger.write("function handleEvents(json : string) : void {")
-logger.write("\n\tlet params;")
-logger.write("\n\tlet event : any = JSON.parse(json);")
+let indexString : string = fs.readFileSync("./index.txt" ).toString()
+indexString = replaceAll(indexString, "::::PROGRAM_NAME", progName)
+indexString = replaceAll(indexString, "::::PROGRAM_ID", progID)
+indexString = replaceAll(indexString, "::::NETWORK", network)
+indexString = replaceAll(indexString, "::::START_SLOT", startslot.toString())
+logger.write(indexString)
+logger.write("\n\n\n")
+
+logger.write("function handleEvents(event : {name : string , params : object}) : void {")
 logger.write("\n\tswitch (event.name) {")
 for (let index = 0; index < eventList.length; index++) {
     const element = eventList[index];
