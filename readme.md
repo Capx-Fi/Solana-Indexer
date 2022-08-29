@@ -6,10 +6,10 @@
 
 ### Files :
 *  [index.ts](SolGraphPackage/src/index.ts) : The main file that is used to call the proper functions according to the arguments passed to it
-*  [init.ts](SolGraphPackage/src/init.ts) : The file that is used to initialize the solgraph folder while taking inputs from the user. THhe inputs are
+*  [init.ts](SolGraphPackage/src/init.ts) : The file that is used to initialize the solgraph folder while taking inputs from the user. The inputs are
    *  Solana network
    *  Solgraph / Indexer name (also used as name of folder created)
-   *  Project ID registered in AWS
+   *  Solgraph name registered. (will throw error if not registered)
    *  Program Name
    *  Program ID
    *  Path to IDL

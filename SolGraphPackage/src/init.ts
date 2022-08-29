@@ -2,36 +2,34 @@ const {
     Connection,
     PublicKey,
     clusterApiUrl,
-    Keypair,
-    LAMPORTS_PER_SOL,
-    Transaction,
-    SystemProgram,
-    sendAndConfirmTransaction
 } = require("@solana/web3.js");
 
 const anchor = require("@project-serum/anchor");
 const { execSync } = require('child_process');
-const {
-    Program,
-    EventParser
-} = require("@project-serum/anchor");
-const { default: NodeWallet} = require("@project-serum/anchor/dist/cjs/nodewallet");
-const web3 = require("@solana/web3.js");
-
-// let idl = require("../indexer/main/idl/program.json");
-// let connection = new web3.Connection(web3.clusterApiUrl('devnet'),"finalized");
 let keyPair = anchor.web3.Keypair.generate();
 
 let nodeWallet = {payer: keyPair};
-// let provider = new anchor.AnchorProvider(connection, nodeWallet, {commitment: "finalized",});
-
-// let program = new Program(idl, "5NbXrgnFeKfwpCPhpwFRrRZ8GqRCDpo94ohuHDBEPzdH", provider);
-// let eventParser = new EventParser("5NbXrgnFeKfwpCPhpwFRrRZ8GqRCDpo94ohuHDBEPzdH", program.coder);
 
 const yaml = require('js-yaml');
 const inquirer = require('inquirer');
 const fs = require('fs');
 const { stringify } = require("querystring");
+const axios = require('axios');
+
+let PROJECT_ID = "";
+
+async function verifyProject(name) {
+    let result = await axios.post("https://rrre8obpmi.execute-api.ap-southeast-2.amazonaws.com/beta/verifyproject" , {
+        name: name
+    })
+    if (result.data.exists) {
+        return "Project already exists";
+    } else {
+        PROJECT_ID = result.data.projid;
+        return true
+    }
+    
+}
 
 async function checkProgram(programId, network) {
     const connection = new Connection(clusterApiUrl(network),"confirmed");
@@ -80,13 +78,14 @@ const indexerInputs = () => {
         },
         {
             type: "input",
-            name: "PROJECT_ID",
-            message: "Enter Project ID :",
-            validate: function(val) {
+            name: "SOLGRAPH_NAME",
+            message: "Enter Solgraph Name :",
+            validate: async function(val) {
                 if(val == "") {
                     return false;
+                } else {
+                    return await verifyProject(val);
                 }
-                return true;
             }
         },
         {
@@ -256,10 +255,6 @@ async function generateProject(answers) {
     // fs.openSync("./"+answers.INDEXER_NAME+"/src/mappings.js", 'w');
     createEntitiesYaml(answers);
     createMapping(answers,data["dataSources"][0].mapping.eventHandlers);
-    if(!fs.existsSync("./"+answers.INDEXER_NAME+"/package")) {
-        fs.mkdirSync("./"+answers.INDEXER_NAME+"/package");
-    }
-    fs.openSync("./"+answers.INDEXER_NAME+"/package/generator.ts", 'w');
     await createNPM(answers);
     await createTSconfig(answers);
     await installPackages(answers);
@@ -381,3 +376,5 @@ async function createTSconfig(answers) {
 function installPackages(answers) {
     execSync("cd "+answers.INDEXER_NAME+" && npm i --silent");
 }
+
+// lowercase name
