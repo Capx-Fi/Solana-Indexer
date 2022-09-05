@@ -1,0 +1,11 @@
+FROM node:18-alpine
+WORKDIR /home/node/app
+RUN apk update && apk add git
+COPY ./package.apollo.json ./package.json
+RUN node -v
+RUN npm config set unsafe-perm true
+RUN npm i apollo-server
+RUN npm i @aws-sdk/util-dynamodb
+RUN npm i @aws-sdk/client-dynamodb
+COPY ./index.js ./index.js
+CMD [ "npm" , "run" , "start" ]

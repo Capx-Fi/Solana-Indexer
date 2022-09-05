@@ -1,7 +1,10 @@
 const AWS = require('aws-sdk');
 var ddb = new AWS.DynamoDB();
 var crypto = require('crypto');
+const axios = require('axios');
+const yaml = require('js-yaml');
 
+// CREATING AUTH CODE
 function makeid(length = 64) {
     var result           = '';
     var characters       = 'ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789';
@@ -13,42 +16,10 @@ function makeid(length = 64) {
    return result;
 }
 
-function makeHashID(name , authcode) {
-    const hash = crypto.createHash('sha256').update(name+authcode).digest('hex');
+// CREATING HASH ID (PROJID)
+function makeHashID(name) {
+    const hash = crypto.createHash('sha256').update(name.toLowerCase()).digest('hex');
     return hash
-}
-
-// interface parsedEvent {
-//     name: string;
-//     params: [
-//         {
-//             "name": string;
-//             "type": string;
-//         }
-//     ];
-//     handler: string;
-// }
-
-
-function parseEventString(event, handler) {
-    const eventName = event.split("(")[0];
-    const eventParams = event.split("(")[1].split(")")[0];
-    const eventParamsArray = eventParams.split(",");
-    const eventParamsArrayParsed = eventParamsArray.map(param => {
-        const paramName = param.split(" ")[0];
-        const paramType = param.split(" ")[param.split(" ").length - 1];
-        return {
-            name: paramName,
-            type: paramType
-        }
-    }).filter(param => param.name !== "this");
-    return {
-        name: eventName,
-        params: eventParamsArrayParsed,
-        handler: handler
-    }
-    
-    
 }
 
 let mapper = new Map ([
@@ -70,76 +41,30 @@ let mapper = new Map ([
     ["i128" , "N"],
 ])
 
-// interface yamlInterface {
-//     indexer : string;
-//     schema : {
-//         file: string;
-//     };
-//     dataSources : [
-//         {
-//             kind : string;
-//             name : string;
-//             network : string;
-//             source : {
-//                 programId : string;
-//                 idl : string;
-//             };
-//             mapping : {
-//                 kind : string;
-//                 entities : [
-//                     string
-//                 ];
-//                 idls : [
-//                     {
-//                         name : string;
-//                         file : string;
-//                     }
-//                 ];
-//                 file : string;
-//                 eventHandlers : [
-//                     {
-//                         event : string;
-//                         handler : string;
-//                     }
-//                 ]
-//             }
-//         }
-//     ],
-//     entities : [
-//         {
-//             name : string;
-//             params : [
-//                 {
-//                     name : string;
-//                     type : string;
-//                     primary : boolean;
-//                 }
-//             ]
-//         }
-//     ]
-// }
 
 
 // PRE CREATION
 async function createAuthCode(username) {
     try {
+        // CREATE AUTH CODE
         const authCode = makeid();
-    const params = {
-        TableName: 'authCodes',
-        Item: {
-            username: {S: username},
-            authCode: {S: authCode}
-        }
-    };
-    await ddb.putItem(params).promise();
-    return authCode;
+        const params = {
+            TableName: 'authCodes',
+            Item: {
+                username: {S: username},
+                authCode: {S: authCode}
+            }
+        };
+        await ddb.putItem(params).promise();
+        return authCode;
     } catch (error) {
         return error.message;
     }
 }
 
 //PRE CREATION
-async function createNewProject(name , gh , desc , username,authCode) {
+async function createNewProject(name, desc, username,authCode) {
+    // VERIFY AUTH CODE 
     let params1 = {
         TableName : 'authCodes',
         Key: {
@@ -152,7 +77,24 @@ async function createNewProject(name , gh , desc , username,authCode) {
         throw new Error("User not Authorized");
     }
 
-    let projid = makeHashID(name,authCode);
+    // CREATE PROJ ID FOR NEW PROJECT FROM NAME AND USERNAME
+    let projid = makeHashID(username + "/" + name);
+    let params2 = {
+            TableName: 'indexers',
+            Key: {
+                'id': {
+                    S: projid
+                }
+            }
+        }
+
+    let result = await ddb.getItem(params2).promise();
+    if (result.Item !== undefined && result.Item !== null) {
+         return {
+             "error" : "Project already exists"
+         }
+    }
+    
     let params = {
         TableName: 'indexers',
         Item: {
@@ -169,7 +111,7 @@ async function createNewProject(name , gh , desc , username,authCode) {
                 S: desc
             },
             'github': {
-                S: gh
+                S: ""
             },
             'created': {
                 S: new Date().toISOString()
@@ -189,9 +131,9 @@ async function createNewProject(name , gh , desc , username,authCode) {
             error : {
                 S: ""
             },
-            indexer: {
-                S: ""
-            },
+            entities : {
+                L : []
+            }
         }
     };
 
@@ -206,7 +148,8 @@ async function createNewProject(name , gh , desc , username,authCode) {
 }
 
 // Verify if projid exists
-async function verifyProjIdExistence(projid) {
+async function verifyProjIdExistence(name) {
+    let projid = makeHashID(name)
     let params1 = {
             TableName: 'indexers',
             Key: {
@@ -219,123 +162,104 @@ async function verifyProjIdExistence(projid) {
         let indexer = await ddb.getItem(params1).promise();
         
         if (indexer.Item != null) {
-            return true
-        } else {
-            return false
-        }
-}
-
-// CREATION
-async function createProject(indexerYAML,projid,authCode) {
-    try {
-        let params1 = {
-            TableName: 'indexers',
-            Key: {
-                'id': {
-                    S: projid
-                }
-            }
-        }
-
-        let indexer = await ddb.getItem(params1).promise();
-
-        if (indexer.Item.authCode.S !== authCode) {
             return {
-                "indexer" : indexer,
-                "authCode" : authCode
-            };
-        }
-
-        let indexerYAMLParsed = indexerYAML;
-
-        let entityList = indexerYAMLParsed["entities"];
-
-        for (let index = 0; index < entityList.length; index++) {
-            const element = entityList[index];
-            let params = {
-                "TableName": projid + "_" + element["name"],
-                "AttributeDefinitions": element.params.filter(param => param.primary).map(param => {
-                    return {
-                        AttributeName: param.name,
-                        AttributeType: mapper.get(param.type)
-                    }
-                }),
-                "KeySchema": element.params.filter(param => param.primary).map(param => {
-                    return {
-                        AttributeName: param.name,
-                        KeyType: "HASH"
-                    }
-                }),
-                ProvisionedThroughput: {
-        ReadCapacityUnits: 10,
-        WriteCapacityUnits: 10
-    }
+                "exists" : true
             }
-            
-            await ddb.createTable(params).promise();
-        }
-
-        let indexerYAMLString = JSON.stringify(indexerYAMLParsed);
-        let params = {
-            "TableName": "indexers",
-            "Key": {
-                "id": {
-                    "S": projid
-                }
-            },
-            "UpdateExpression": "SET #in = :i , #st = :s , #er = :e",
-            "ExpressionAttributeValues": {
-                ":i": {
-                    "S": indexerYAMLString
-                },
-                ":s": {
-                    "S": "Running"
-                },
-                ":e": {
-                    "S": ""
-                }
-            },
-            ExpressionAttributeNames : {
-                "#in" : "indexer",
-                "#st" : "status",
-                "#er" : "error"
+        } else {
+            return {
+                "exists" : false,
+                "projid" : projid
             }
         }
-
-        await ddb.updateItem(params).promise();
-    } catch (error) {
-        let params = {
-            "TableName": "indexers",
-            "Key": {
-                "id": {
-                    "S": projid
-                }
-            },
-            "UpdateExpression": "SET #st = :s, #er = :e",
-            "ExpressionAttributeValues": {
-                ":s": {
-                    "S": "Error"
-                },
-                ":e": {
-                    "S": error.message
-                }
-            },
-            ExpressionAttributeNames : {
-                "#st" : "status",
-                "#er" : "error"
-            }
-            
-        }
-
-        await ddb.updateItem(params).promise();
-        
-        return error.message
-    }
 }
 
-// UPDATE
-async function updateProject(projid ,newIndexerYAML,authCode) {
+async function verifyRepo(user, repo, branch) {
+  let link = "https://raw.githubusercontent.com/" + user + "/" + repo + "/" + branch + "/";
+
+  let returnlist = [];
+  let result = await axios.get(link + "src/mapping.ts")
+  if (result.status != 200) {
+    returnlist.push("mapping.ts not found in specified branch or repo is private");
+  }
+  result = await axios.get(link + "entities.yaml")
+  if (result.status != 200) {
+    returnlist.push("entities.yaml not found in specified branch or repo is private");
+  }
+  result = await axios.get(link + "indexer.yaml")
+  if (result.status != 200) {
+    returnlist.push("indexer.yaml not found in specified branch or repo is private");
+  }
+  result = await axios.get(link + "package.json")
+  if (result.status != 200) {
+    returnlist.push("package.json not found in specified branch or repo is private");
+  }
+  return returnlist;
+}
+
+async function parseRepoLink(GHLink , branch = undefined) {
+    let user;
+    let repo ;
+    
+  // GETTING USER , REPO , BRANCH
+  if (GHLink.startsWith("https://github.com")) {
+    GHLink = GHLink.slice(19);
+    if (GHLink.endsWith(".git")) {
+      GHLink = GHLink.slice(0,GHLink.length-4);
+    }
+    if (GHLink.split("/").length == 2) {
+      [user , repo] = GHLink.split("/");
+    } else if (GHLink.split("/").length >= 4) {
+      let split = GHLink.split("/");
+      user = split[0];
+      repo = split[1];
+      branch = split.slice(3).join("/");
+    } else {
+      return ["invalid link"];
+    }
+  } else if (GHLink.startsWith("git@github.com")) {
+    GHLink = GHLink.slice(15);
+    GHLink = GHLink.slice(0,GHLink.length-4);
+    [user , repo] = GHLink.split("/");
+  } else {
+    return ["Invalid GitHub link"];
+  }
+
+  if (branch == undefined) {
+    let result = await axios.get("https://api.github.com/repos/" + user + "/" + repo)
+    branch = result.data.default_branch;
+  }
+  
+  return [user , repo , branch];
+  
+}
+
+// UPDATE and CREATE
+async function updateProject(authCode, gh, branch) {
     try {
+        // PARSING GITHUB LINK
+        let temp = await parseRepoLink(gh,branch)
+        if (temp.length < 2) {
+            return temp[0]
+        }
+        let [user , repo , branch] = temp
+        
+        // VERIFIYING FILES EXISTENCE IN GIVEN REPO
+        temp = await verifyRepo(user, repo , branch)
+        if (temp.length > 0) {
+            return temp
+        }
+        
+        // FETCHING ENTITIES.YAML AND INDEXER.YAML
+        let link = "https://raw.githubusercontent.com/" + user + "/" + repo + "/" + branch + "/";
+        let result = await axios.get(link + "indexer.yaml")
+        let indexerYAML =  yaml.load(result.data)
+        result = await axios.get(link + "entities.yaml")
+        let entitiesYAML =  yaml.load(result.data)
+        
+        let name = indexerYAML.solName
+        
+        // VERIFYING IF USER IS AUTHORIZED
+        let projid = makeHashID(name)
         let params1 = {
             TableName: 'indexers',
             Key: {
@@ -346,35 +270,28 @@ async function updateProject(projid ,newIndexerYAML,authCode) {
         }
 
         let indexer = await ddb.getItem(params1).promise();
+        
+        if (indexer.Item == undefined) {
+            return "Project is not Initialized properly"
+        }
 
         if (indexer.Item.authCode.S !== authCode) {
             return ("Invalid auth code");
         }
-
-        let indexerYAMLParsed = newIndexerYAML;
-        let entityList = indexerYAMLParsed["entities"];
-
-        let oldIndexerYAMLResponse = await ddb.getItem({
-            "TableName": "indexers",
-            "Key": {
-                "id": {
-                    "S": projid
-                }
-            }
-        }).promise();
-
-        let oldIndexerYAML = JSON.parse(oldIndexerYAMLResponse.Item.indexer.S);
-
-        let oldEntityList = oldIndexerYAML["entities"];
+        
+        // DELETE OLD ENTITIES IF ANY
+        let oldEntityList = indexer.Item.entities.L
         for (let index = 0; index < oldEntityList.length; index++) {
             const element = oldEntityList[index];
             let params = {
-                "TableName": projid + "_" + element["name"],
+                "TableName": projid + "_" + element,
             }
             await ddb.deleteTable(params).promise();
             await ddb.waitFor("tableNotExists",params).promise()
         }
-
+        
+        // CREATE NEW TABLES
+        let entityList = entitiesYAML["entities"];
         for (let index = 0; index < entityList.length; index++) {
             const element = entityList[index];
             let params = {
@@ -392,15 +309,18 @@ async function updateProject(projid ,newIndexerYAML,authCode) {
                     }
                 }),
                 ProvisionedThroughput: {
-        ReadCapacityUnits: 10,
-        WriteCapacityUnits: 10
-    }
+                    ReadCapacityUnits: 10,
+                    WriteCapacityUnits: 10
+                }
             }
             
             await ddb.createTable(params).promise();
         }
-
-        let indexerYAMLString = JSON.stringify(indexerYAMLParsed);
+        
+        // CREATE DOCKER CONTAINER
+        // CALL EC2 FUNCTION WITH USER , REPO , BRANCH AND PROJID
+        
+        // UPDATE INDEXER TABLE ACCORDINGLY
         let params = {
             "TableName": "indexers",
             "Key": {
@@ -408,47 +328,25 @@ async function updateProject(projid ,newIndexerYAML,authCode) {
                     "S": projid
                 }
             },
-            "UpdateExpression": "set indexer = :i",
+            "UpdateExpression": "set entities = :e",
             "ExpressionAttributeValues": {
-                ":i": {
-                    "S": indexerYAMLString
-                }
-            }
-        }
-
-        await ddb.updateItem(params).promise();
-    } catch (error) {
-        let params = {
-            "TableName": "indexers",
-            "Key": {
-                "id": {
-                    "S": projid
-                }
-            },
-            "UpdateExpression": "SET #st = :s, #er = :e",
-            "ExpressionAttributeValues": {
-                ":s": {
-                    "S": "Error"
-                },
                 ":e": {
-                    "S": error.message
+                    "L": entityList.map(x => x.name)
                 }
-            },
-            ExpressionAttributeNames : {
-                "#st" : "status",
-                "#er" : "error"
             }
-            
         }
 
         await ddb.updateItem(params).promise();
         
-        return error.message
+    } catch (error) {
+        
     }
 }
 
 // DELETE
-async function deleteProject(projid ,authCode ) {
+async function deleteProject(name ,authCode ) {
+    let projid = makeHashID(name)
+    
     let params1 = {
         TableName: 'indexers',
         Key: {
@@ -464,13 +362,11 @@ async function deleteProject(projid ,authCode ) {
         return ("Invalid auth code");
     }
 
-    let indexerYAML = JSON.parse(indexer.Item.indexer.S) ;
-
-    let entityList = indexerYAML["entities"];
+    let entityList = indexer.Item.entities.L;
     for (let index = 0; index < entityList.length; index++) {
         const element = entityList[index];
         let params = {
-            "TableName": projid + "_" + element["name"],
+            "TableName": projid + "_" + element,
         }
         await ddb.deleteTable(params).promise();
     }
@@ -488,6 +384,7 @@ async function deleteProject(projid ,authCode ) {
 }
 
 exports.handler = async (event) => {
+    console.log(event)
     let body = JSON.parse(event["body"])
     let returnobj;
     switch (event["path"]) {
@@ -497,14 +394,14 @@ exports.handler = async (event) => {
         case "/createnewproject":
             returnobj = await createNewProject(body.name,body.gh,body.desc,body.username,body.authCode)
             break;
-        case "/createproject" :
-            returnobj = await createProject(JSON.parse(body.indexerYAML),body.projid,body.authCode)
-            break;
         case "/updateproject":
-            returnobj = await updateProject(body.projid,JSON.parse(body.newIndexerYAML) ,body.authCode)
+            returnobj = await updateProject(body.authCode, body.gh, body.branch)
             break;
         case "/deleteproject" :
-            returnobj = await deleteProject(body.projid,body.authCode)
+            returnobj = await deleteProject(body.name,body.authCode)
+            break;
+        case "/verifyproject" :
+            returnobj = await verifyProjIdExistence(body.name)
             break;
     }
     const response = {

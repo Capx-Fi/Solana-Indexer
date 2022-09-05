@@ -61,6 +61,7 @@ let mapper : Map<string,string> = new Map<string,string> ([
 
 interface yamlInterface {
     indexer : string;
+    solName : string;
     schema : {
         file: string;
     };

@@ -182,6 +182,7 @@ function transformIDL(answers) {
         });
         return [{
             indexer: answers.INDEXER_NAME,
+            solName : answers.SOLGRAPH_NAME,
             schema: {
                 file: "./schema.json"
             },

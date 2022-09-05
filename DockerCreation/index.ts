@@ -2,76 +2,56 @@ import express, { Request, Response, NextFunction } from 'express';
 import * as fs from 'fs';
 var bodyParser = require('body-parser')
 var execSync = require('child_process').execSync;
+let yaml = require("js-yaml");
+const axios = require('axios');
 
 
 const app = express();
 const port = 3000;
 app.use(bodyParser.json())
 
+async function verifyContainer(projid : string) {
+  let exists = execSync("docker container ls -a -f name=^/" + projid + "$").toString()
+  if (exists.trim().split("\n").length >1) {
+    let temp = exists.split("\n")[1].split("  ").map((x : string) => x.trim()).filter((x : string) => x != "")
+    if (temp[4].split(" ")[0] != "Exited") {
+      await execSync("docker kill " + projid)
+    }
+    await execSync("docker rm " + projid)
+  }
+}
 
-app.post('/' , async function (request: Request, response: Response, next: NextFunction) {
-  let user : string;
-  let repo : string;
+
+app.post('/indexer' , async function (request: Request, response: Response, next: NextFunction) {
+  let user : string = request.body.user;
+  let repo : string = request.body.repo;
   let branch : string = request.body.branch;
-  let GHLink : string = (request.body.link);
-  let logger = fs.createWriteStream("./DockerFile")
-  logger.write("FROM alpine/node\nWORKDIR /home/node/app\nRUN apk update && apk add git\n")
-  if (GHLink.startsWith("https://github.com")) {
-    GHLink = GHLink.slice(19);
-    if (GHLink.endsWith(".git")) {
-      GHLink = GHLink.slice(0,GHLink.length-4);
-    }
-    if (GHLink.split("/").length == 2) {
-      [user , repo] = GHLink.split("/");
-    } else if (GHLink.split("/").length >= 4) {
-      let split = GHLink.split("/");
-      user = split[0];
-      repo = split[1];
-      branch = split.slice(3).join("/");
-    } else {
-      response.status(406).send({
-        error: "Invalid link",
-        statusCode : 406
-      });
-      return;
-    }
-    console.log(branch)
-  } else if (GHLink.startsWith("git@github.com")) {
-    GHLink = GHLink.slice(15);
-    GHLink = GHLink.slice(0,GHLink.length-4);
-    [user , repo] = GHLink.split("/");
-  } else {
-    response.status(400).send("Invalid GitHub link");
-    return;
-  }
+  let projid : string = request.body.projid;
 
-  function replaceAll(string : string, search : string, replace : string) {
-    return string.split(search).join(replace);
-  }
+  await verifyContainer(projid);
 
   try {
-    if (branch != undefined) {
-      console.log(branch);
-      logger.write("RUN git clone https://github.com/" + user + "/" + repo + " -b " + branch+"\n")  
-    } else {
-      logger.write("RUN git clone https://github.com/" + user + "/" + repo + "\n")
-    }
-    logger.write("WORKDIR /home/node/app/" + repo + "\n")
-    logger.write("RUN npm install\n")
-    logger.write("CMD [\"npm\", \"start\"]\n")
-    // logger.write("EXPOSE 5000\n")
+    let data : string = "FROM alpine/node\nWORKDIR /home/node/app\nRUN apk update && apk add git\n";
+    data += "RUN git clone https://github.com/" + user + "/" + repo + " -b " + branch+"\n"
+    data += "WORKDIR /home/node/app/" + repo + "\n"
+    data += "RUN npm install\n"
+    data += "CMD [\"npm\", \"start\"]\n"
+    await fs.writeFile("./Dockerfile.processor", data, function (err) {
+      if (err) {
+        throw err 
+      } else {
+        // RUNNING DOCKER CONTAINER
+        execSync("docker build -f Dockerfile.processor -q -t " + projid + ":latest .");
+        execSync("docker run -d --name " + projid + " " + projid + ":latest");
 
-
-
-    execSync("docker build -t " + user.toLowerCase() + "/" + repo.toLowerCase() + ":latest .");
-    execSync("docker run -d -p 80:5000 " + user.toLowerCase() + "/" + repo.toLowerCase() + ":latest");
-
-    response.status(200).send(
-      {
-        "status": "success",
-        statusCode : 200
+        response.status(200).send(
+          {
+            "status": "success",
+            statusCode : 200
+          }
+        );
       }
-    );
+    });
   } catch (error : any) {
     if (error.stderr.toString().includes("branch" + branch + " not found")) {
       console.log("Branch not found");
@@ -92,12 +72,122 @@ app.post('/' , async function (request: Request, response: Response, next: NextF
       });
       return
     }
-
-
   }
+})
 
+app.post('/apollo',async function (request: Request, response: Response, next: NextFunction) {
+  let user : string = request.body.user;
+  let repo : string = request.body.repo;
+  let branch : string = request.body.branch;
+  let projid : string = request.body.projid;
+  let link = "https://raw.githubusercontent.com/" + user + "/" + repo + "/" + branch + "/";
+  let result = await axios.get(link + "indexer.yaml")
+  let indexerYAML =  yaml.load(result.data)
+  result = await axios.get(link + "entities.yaml")
+  let docs =  yaml.load(result.data)
   
+  let name = indexerYAML.solName
+  const PROJECTID = projid;
 
+  let data = ""
+
+  const dataTypes = {
+    string:"String",
+    number:"Int",
+    boolean:"Boolean"
+};
+
+const imports = `const { ApolloServer, gql } = require("apollo-server");
+const { unmarshall } = require("@aws-sdk/util-dynamodb");
+const { DynamoDBClient, ScanCommand } = require("@aws-sdk/client-dynamodb");
+
+const client = new DynamoDBClient({ region: "us-east-2" });\n`;
+
+data += imports;
+
+let schema = 'const typeDefs = gql`'
+schema = schema + '\n\t' + 'scalar JSON';
+let queries : string[] = [];
+docs.entities.map((entity) => {
+    queries.push(entity.name);
+    schema = schema + '\n\t' + 'type ' + entity.name + ' {'
+    entity.params.map((param) => {
+        schema = schema + '\n\t\t'+ param.name+" : "+dataTypes[param.type]+ (param.primary ? "!" : "");
+    })
+    schema = schema + '\n\t}';
+});
+
+schema = schema + '\n\t' + 'type Query {'
+queries.map((query) => {
+    schema = schema + '\n\t\t' + (query ? query.charAt(0).toLowerCase() + query.slice(1) : "") + ": ["+query+"]"
+})
+schema = schema + '\n\t}\n`;\n';
+console.log(schema);
+data += schema;
+// DynamoDB Retrieve Data
+let sampleDB = `const getENTITY = async() => {
+    const params = {
+        TableName: TABLE_NAME
+    };
+
+    try {
+        const results = await client.send(new ScanCommand(params));
+        const data = [];
+        results.Items.forEach((item) => {
+            data.push(unmarshall(item));
+        });
+        return data;
+    } catch (err) {
+        console.error(err);
+        return err;
+    }
+};`
+let retrievers = "";
+queries.map((entity) => {
+    retrievers += sampleDB.replace("ENTITY",(entity ? entity.charAt(0).toUpperCase() + entity.slice(1) : "")).replace("TABLE_NAME",PROJECTID+"_"+entity);
+})
+console.log(retrievers);
+data+=retrievers;
+
+
+// Resolvers
+let resolvers = `const resolvers = {
+    Query: {\n`;
+queries.map((query) => {
+    resolvers += '\t\t' + (query ? query.charAt(0).toLowerCase() + query.slice(1) : "") + ": () => { return get"+(query ? query.charAt(0).toUpperCase() + query.slice(1) : "")+"(); },\n"
+})
+resolvers += `},
+};`;
+console.log(resolvers);
+data+=resolvers;
+
+let server = `const server = new ApolloServer({
+    typeDefs,
+    resolvers,
+});
+
+server.listen().then(({ url }) => {\n\t`;
+server += "console.log(`🚀  Server ready at ${url}`);\n});";
+
+console.log(server);
+data+=server;
+
+await fs.writeFile("./index.js", data, function (err) {
+    if (err) {
+      throw err 
+    } else {
+      // RUNNING DOCKER CONTAINER
+      execSync("docker build -q -t " + projid + ":latest .");
+      execSync("docker run -d --name " + projid + " " + projid + ":latest");
+
+      response.status(200).send(
+        {
+          "status": "success",
+          statusCode : 200
+        }
+      );
+    }
+  });
 })
 
 
