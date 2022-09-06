@@ -22,10 +22,11 @@ async function verifyProject(name) {
     let result = await axios.post("https://rrre8obpmi.execute-api.ap-southeast-2.amazonaws.com/beta/verifyproject" , {
         name: name
     })
-    if (result.data.exists) {
-        return "Project already exists";
+    // FIX THIS
+    if (!result.data.exists) {
+        // PROJECT_ID = result.data.projid;
+        return "Project doesn't exist";
     } else {
-        PROJECT_ID = result.data.projid;
         return true
     }
     
