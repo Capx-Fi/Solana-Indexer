@@ -226,9 +226,8 @@ for (let index = 0; index < entityList.length; index++) {
     }
     logger.write("\n\t\tawait saver(\"" + element["name"].replace(/\s/g, "") + "\", temp)")
     logger.write("\n\t}")
+    logger.write("}\n")
 }
-
-logger.write("}\n")
 
 
 

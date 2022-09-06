@@ -24,9 +24,9 @@ async function verifyProject(name) {
     })
     // FIX THIS
     if (!result.data.exists) {
-        // PROJECT_ID = result.data.projid;
         return "Project doesn't exist";
     } else {
+        PROJECT_ID = result.data.projid;
         return true
     }
     

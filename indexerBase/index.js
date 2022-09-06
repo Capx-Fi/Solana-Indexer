@@ -72,10 +72,13 @@ async function createNewProject(name, desc, username,authCode) {
         }
     }
     
+    
     let authCodeFromDb = await ddb.getItem(params1).promise();
     if (authCodeFromDb.Item.authCode.S !== authCode) {
-        throw new Error("User not Authorized");
+        return ("User not Authorized");
     }
+    
+    
 
     // CREATE PROJ ID FOR NEW PROJECT FROM NAME AND USERNAME
     let projid = makeHashID(username + "/" + name);
@@ -111,7 +114,7 @@ async function createNewProject(name, desc, username,authCode) {
                 S: desc
             },
             'github': {
-                S: ""
+                L : []
             },
             'created': {
                 S: new Date().toISOString()
@@ -163,12 +166,12 @@ async function verifyProjIdExistence(name) {
         
         if (indexer.Item != null) {
             return {
-                "exists" : true
+                "exists" : true,
+                "projid" : projid
             }
         } else {
             return {
                 "exists" : false,
-                "projid" : projid
             }
         }
 }
@@ -317,8 +320,51 @@ async function updateProject(authCode, gh, branch) {
             await ddb.createTable(params).promise();
         }
         
+        try {
         // CREATE DOCKER CONTAINER
         // CALL EC2 FUNCTION WITH USER , REPO , BRANCH AND PROJID
+        } catch (error) {
+            if (indexer.Item.github.length > 0) {
+            // DELETE NEWLY CREATED TABLES
+            for (let index = 0; index < oldEntityList.length; index++) {
+                const element = entityList[index];
+                let params = {
+                    "TableName": projid + "_" + element["name"],
+                }
+                await ddb.deleteTable(params).promise();
+                await ddb.waitFor("tableNotExists",params).promise()
+            }
+            
+            // RECREATE OLD TABLES
+            for (let index = 0; index < entityList.length; index++) {
+                const element = entityList[index];
+                let params = {
+                    "TableName": projid + "_" + element["name"],
+                    "AttributeDefinitions": element.params.filter(param => param.primary).map(param => {
+                        return {
+                            AttributeName: param.name,
+                            AttributeType: mapper.get(param.type)
+                        }
+                    }),
+                    "KeySchema": element.params.filter(param => param.primary).map(param => {
+                        return {
+                            AttributeName: param.name,
+                            KeyType: "HASH"
+                        }
+                    }),
+                    ProvisionedThroughput: {
+                        ReadCapacityUnits: 10,
+                        WriteCapacityUnits: 10
+                    }
+                }
+                await ddb.createTable(params).promise();
+            }
+            
+            // CALL EC2 INSTANCE TO CREATE DOCKER CONTAINER AGAIN USING OLD VALUES OF USER REPO AND BRANCH
+            return "Update Failed , Reverted back to previous version"
+            }
+            return "Creation Failed"
+        }
         
         // UPDATE INDEXER TABLE ACCORDINGLY
         let params = {
@@ -328,10 +374,13 @@ async function updateProject(authCode, gh, branch) {
                     "S": projid
                 }
             },
-            "UpdateExpression": "set entities = :e",
+            "UpdateExpression": "set entities = :e, github = :g",
             "ExpressionAttributeValues": {
                 ":e": {
                     "L": entityList.map(x => x.name)
+                },
+                ":g" : {
+                    "L" : [user,repo,]
                 }
             }
         }
@@ -339,7 +388,7 @@ async function updateProject(authCode, gh, branch) {
         await ddb.updateItem(params).promise();
         
     } catch (error) {
-        
+        return error.message
     }
 }
 
@@ -387,26 +436,26 @@ exports.handler = async (event) => {
     console.log(event)
     let body = JSON.parse(event["body"])
     let returnobj;
-    switch (event["path"]) {
-        case "/createauthcode" :
-            returnobj = await createAuthCode(body.username)
-            break;
-        case "/createnewproject":
-            returnobj = await createNewProject(body.name,body.gh,body.desc,body.username,body.authCode)
-            break;
-        case "/updateproject":
-            returnobj = await updateProject(body.authCode, body.gh, body.branch)
-            break;
-        case "/deleteproject" :
-            returnobj = await deleteProject(body.name,body.authCode)
-            break;
-        case "/verifyproject" :
-            returnobj = await verifyProjIdExistence(body.name)
-            break;
-    }
+    // switch (event["path"]) {
+    //     case "/createauthcode" :
+    //         returnobj = await createAuthCode(body.username)
+    //         break;
+    //     case "/createnewproject":
+    //         returnobj = await createNewProject(body.name,body.desc,body.username,body.authCode)
+    //         break;
+    //     case "/updateproject":
+    //         returnobj = await updateProject(body.authCode, body.gh, body.branch)
+    //         break;
+    //     case "/deleteproject" :
+    //         returnobj = await deleteProject(body.name,body.authCode)
+    //         break;
+    //     case "/verifyproject" :
+    //         returnobj = await verifyProjIdExistence(body.name)
+    //         break;
+    // }
     const response = {
         statusCode: 200,
-        body: JSON.stringify(returnobj),
+        body: JSON.stringify(event),
     };
     return response;
 };
