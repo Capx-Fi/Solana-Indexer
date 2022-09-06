@@ -189,9 +189,9 @@ export async function generator() {
     
     
         logger.write("\n\tasync save() : Promise<void> {\n\t}\n")
+        logger.write("}\n")
     }
     
-    logger.write("}\n")
     
     
     
