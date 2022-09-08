@@ -191,6 +191,9 @@ for (let index = 0; index < entityList.length; index++) {
         const element1 = element["params"][index];
         if (element1["primary"] == true) {
             logger.write(element1["name"].replace(/\s/g, ""))
+            logger.write(", \"")
+            logger.write(element1["name"].replace(/\s/g, ""))
+            logger.write("\"")
         }
     }
     logger.write(")\n\t\t")
@@ -216,10 +219,12 @@ for (let index = 0; index < entityList.length; index++) {
     logger.write("\n\t\tlet temp = {}\n")
     for (let index = 0; index < element["params"].length; index++) {
         const element1 = element["params"][index];
-        if (element1["type"] == "publickey") {
-            logger.write("\t\ttemp[\"" + element1["name"].replace(/\s/g, "") + "\"] = this." + element1["name"].replace(/\s/g, "") + ".toBase58();\n")    
+        if (element1["type"].toLowerCase() == "publickey") {
+            logger.write("console.log(typeof this." + element1["name"].replace(/\s/g, "") + ")\n")
+            logger.write("console.log(this." + element1["name"].replace(/\s/g, "") + ")\n")
+            logger.write("\t\ttemp[\"" + element1["name"].replace(/\s/g, "") + "\"] = typeof this." + element1["name"].replace(/\s/g, "") + " === \'undefined\' ? this." + element1["name"].replace(/\s/g, "") + " : this." + element1["name"].replace(/\s/g, "") + ";\n")    
         } else if (mapper.get(element1["type"]) == "BN" ) {
-            logger.write("\t\ttemp[\"" + element1["name"].replace(/\s/g, "") + "\"] = this." + element1["name"].replace(/\s/g, "") + ".toNumber();\n")    
+            logger.write("\t\ttemp[\"" + element1["name"].replace(/\s/g, "") + "\"] = this." + element1["name"].replace(/\s/g, "") + ";\n")    
         } else {
             logger.write("\t\ttemp[\"" + element1["name"].replace(/\s/g, "") + "\"] = this." + element1["name"].replace(/\s/g, "") + ";\n")
         }

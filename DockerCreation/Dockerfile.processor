@@ -1,0 +1,16 @@
+FROM node:alpine
+WORKDIR /home/node/app
+RUN apk update && apk add git && npm install --location=global ts-node
+RUN git clone https://github.com/Chester-King/test-idx -b master
+WORKDIR /home/node/app/test-idx
+RUN npm install
+RUN npm i js-yaml
+RUN npm i axios
+RUN npm i aws-sdk
+COPY ./serverSide ./serverSide
+WORKDIR /home/node/app/test-idx/serverSide
+RUN ts-node ./generatorMain.ts
+WORKDIR /home/node/app/test-idx
+ENV PROJECT_ID 8948f98f596a2950dc751408f336f460ecfd8145ab06f089e1b929a745a14335
+RUN echo "$(<./generated/Interfaces.ts)"
+CMD ["echo", "$(<./generated/Interfaces.ts)"]

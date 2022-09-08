@@ -9,7 +9,7 @@ import {
     clusterApiUrl
 } from "@solana/web3.js";
 const axios = require('axios');
-import { IDL } from "./idls/::::PROGRAM_NAME_ts";
+import { IDL } from "../idls/::::PROGRAM_NAME_ts";
 import NodeWallet from "@project-serum/anchor/dist/cjs/nodewallet";
 
 let connection = new Connection("::::CLUSTER_URL","finalized");
@@ -78,4 +78,4 @@ const getEventObject = async(slot: number) => {
     }
 }
 
-getEventObject(160172604);
+getEventObject(160272135);

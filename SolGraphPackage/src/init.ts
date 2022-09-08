@@ -278,6 +278,8 @@ function createMapping(answers,eventHandlers) {
         logger.write("\n\t"+ element["name"].replace(/\s/g, "") + ",")
     }
     logger.write("\n} from '../generated/Interfaces';\n\n")
+
+    logger.write("import { BN } from '@project-serum/anchor';\nimport { PublicKey } from '@solana/web3.js';\n")
     
     for (let index = 0; index < eventList.length; index++) {
         const element = eventList[index];

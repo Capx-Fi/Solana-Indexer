@@ -1,0 +1,16 @@
+{
+    "compilerOptions": {
+    "module": "commonjs",
+    "esModuleInterop" : true,
+    "declaration": true,
+    "removeComments": true,
+    "allowSyntheticDefaultImports": true,
+    "target": "es2017",
+    "sourceMap": false,
+    "outDir": "./dist",
+    "baseUrl": "./",
+    "incremental": true
+    },
+    "include": ["*.ts,/**/*.ts"],
+    "exclude": ["node modules","test","lib", "**/*spec.ts"]
+  }

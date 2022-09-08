@@ -11,13 +11,14 @@ const port = 3000;
 app.use(bodyParser.json())
 
 async function verifyContainer(projid : string) {
-  let exists = execSync("docker container ls -a -f name=^/" + projid + "$").toString()
+  let exists = execSync("sudo docker container ls -a -f name=^/" + projid + "$").toString()
   if (exists.trim().split("\n").length >1) {
     let temp = exists.split("\n")[1].split("  ").map((x : string) => x.trim()).filter((x : string) => x != "")
     if (temp[4].split(" ")[0] != "Exited") {
-      await execSync("docker kill " + projid)
+      await execSync("sudo docker kill " + projid)
     }
-    await execSync("docker rm " + projid)
+    await execSync("sudo docker rm " + projid)
+    await execSync("sudo docker rmi $(sudo docker images | grep '"+ projid +"')")
   }
 }
 
@@ -31,18 +32,26 @@ app.post('/indexer' , async function (request: Request, response: Response, next
   await verifyContainer(projid);
 
   try {
-    let data : string = "FROM alpine/node\nWORKDIR /home/node/app\nRUN apk update && apk add git\n";
+    let data : string = "FROM node:alpine\nWORKDIR /home/node/app\nRUN apk update && apk add git && npm install --location=global ts-node\n";
     data += "RUN git clone https://github.com/" + user + "/" + repo + " -b " + branch+"\n"
     data += "WORKDIR /home/node/app/" + repo + "\n"
     data += "RUN npm install\n"
-    data += "CMD [\"npm\", \"start\"]\n"
+    data += "RUN npm i js-yaml\n"
+    data += "RUN npm i axios\n"
+    data += "RUN npm i aws-sdk\n"
+    data += "COPY ./serverSide ./serverSide\n"
+    data += "WORKDIR /home/node/app/" + repo + "/serverSide\n"
+    data += "RUN ts-node ./generatorMain.ts\n"
+    data += "WORKDIR /home/node/app/" + repo + "\n"
+    data += "ENV PROJECT_ID " + projid + "\n" 
+    data += "CMD [\"ts-node\", \"./generated/EventRouter.ts\"]\n"
     await fs.writeFile("./Dockerfile.processor", data, function (err) {
       if (err) {
         throw err 
       } else {
         // RUNNING DOCKER CONTAINER
-        execSync("docker build -f Dockerfile.processor -q -t " + projid + ":latest .");
-        execSync("docker run -d --name " + projid + " " + projid + ":latest");
+        execSync("sudo docker build -f Dockerfile.processor -t " + projid + ":latest .");
+        execSync("sudo docker run -d --name " + projid + " " + projid + ":latest");
 
         response.status(200).send(
           {
@@ -53,6 +62,8 @@ app.post('/indexer' , async function (request: Request, response: Response, next
       }
     });
   } catch (error : any) {
+    console.log(error.stderr.toString());
+    
     if (error.stderr.toString().includes("branch" + branch + " not found")) {
       console.log("Branch not found");
       response.status(406).send({error: "Branch not found",statusCode : 406});
@@ -127,7 +138,7 @@ data += schema;
 // DynamoDB Retrieve Data
 let sampleDB = `const getENTITY = async() => {
     const params = {
-        TableName: TABLE_NAME
+        TableName: \"TABLE_NAME\"
     };
 
     try {
@@ -177,8 +188,8 @@ await fs.writeFile("./index.js", data, function (err) {
       throw err 
     } else {
       // RUNNING DOCKER CONTAINER
-      execSync("docker build -q -t " + projid + ":latest .");
-      execSync("docker run -d --name " + projid + " " + projid + ":latest");
+      execSync("sudo docker build -q -f Dockerfile.apollo -t " + projid + ":latest .");
+      execSync("sudo docker run -d --name " + projid + " " + projid + ":latest");
 
       response.status(200).send(
         {
