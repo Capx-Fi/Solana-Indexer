@@ -19,14 +19,13 @@ const axios = require('axios');
 let PROJECT_ID = "";
 
 async function verifyProject(name) {
-    let result = await axios.post("https://rrre8obpmi.execute-api.ap-southeast-2.amazonaws.com/beta/verifyproject" , {
+    let result = await axios.post("http://3.24.27.133:8080/verifyProject" , {
         name: name
     })
     // FIX THIS
-    if (!result.data.exists) {
+    if (!result.status) {
         return "Project doesn't exist";
     } else {
-        PROJECT_ID = result.data.projid;
         return true
     }
     
