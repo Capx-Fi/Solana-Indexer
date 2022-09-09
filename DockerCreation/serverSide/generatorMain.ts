@@ -282,7 +282,7 @@ indexString = replaceAll(indexString, "::::PROGRAM_ID", progID)
 indexString = replaceAll(indexString, "::::NETWORK", network)
 indexString = replaceAll(indexString, "::::START_SLOT", startslot.toString())
 // IMPLEMENT FETCHING CLUSTER URL FROM DYNAMO DB
-let clusterUrl = "https://solana-devnet.g.alchemy.com/v2/my5oNvC2QPydN0jxJFKOoYld67MP9liC"
+let clusterUrl = "https://solana-devnet.g.alchemy.com/v2/FN-j_DEecftJ-VAtcMzD72gzueeb82Mz"
 indexString = replaceAll(indexString, "::::CLUSTER_URL", clusterUrl)
 logger.write(indexString)
 logger.write("\n\n\n")

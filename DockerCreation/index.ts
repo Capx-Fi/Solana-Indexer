@@ -38,6 +38,42 @@ async function verifyApolloContainer(projid: string) {
   }
 }
 
+app.get('/', (req: Request, res: Response) => {
+  res.status(200).send(
+    {
+      "status": "success",
+      statusCode : 200
+    }
+  );
+});
+
+app.get('/getQueryURL', async function(request: Request, response: Response, next: NextFunction) {
+  if(request.query.id) {
+    let projid = request.query.id.toString();
+    if(projid in portMap){
+      response.status(200).send(
+        {
+          status: "success",
+          mappedPort : portMap[projid]
+        }
+      );
+    } else {
+      response.status(200).send(
+        {
+          status: "Not Found",
+        }
+      );
+    }
+  } else {
+    response.status(200).send(
+      {
+        status: "Error: Missing id.",
+        statusCode : 200
+      }
+    );
+  }
+})
+
 
 app.post('/indexer' , async function (request: Request, response: Response, next: NextFunction) {
   let user : string = request.body.user;
@@ -46,7 +82,7 @@ app.post('/indexer' , async function (request: Request, response: Response, next
   let projid : string = request.body.projid;
 
   await verifyContainer(projid);
-
+  console.log("Request Received for Project: ", projid);
   try {
     let data : string = "FROM node:alpine\nWORKDIR /home/node/app\nRUN apk update && apk add git && npm install --location=global ts-node\n";
     data += "RUN git clone https://github.com/" + user + "/" + repo + " -b " + branch+"\n"
@@ -152,7 +188,7 @@ queries.map((query) => {
     schema = schema + '\n\t\t' + (query ? query.charAt(0).toLowerCase() + query.slice(1) : "") + ": ["+query+"]"
 })
 schema = schema + '\n\t}\n`;\n';
-console.log(schema);
+// console.log(schema);
 data += schema;
 // DynamoDB Retrieve Data
 let sampleDB = `const getENTITY = async() => {
@@ -176,7 +212,7 @@ let retrievers = "";
 queries.map((entity) => {
     retrievers += sampleDB.replace("ENTITY",(entity ? entity.charAt(0).toUpperCase() + entity.slice(1) : "")).replace("TABLE_NAME",PROJECTID+"_"+entity);
 })
-console.log(retrievers);
+// console.log(retrievers);
 data+=retrievers;
 
 
@@ -188,7 +224,7 @@ queries.map((query) => {
 })
 resolvers += `},
 };`;
-console.log(resolvers);
+// console.log(resolvers);
 data+=resolvers;
 
 let server = `const server = new ApolloServer({
@@ -208,7 +244,7 @@ if(projid in portMap){
 }
 
 server = server.replace("PORT",_port.toString());
-console.log(server);
+console.log("ProjectId:",projid,"\nPort:", _port);
 data+=server;
 
 await fs.writeFile("./index.js", data, function (err) {
@@ -227,7 +263,7 @@ await fs.writeFile("./index.js", data, function (err) {
       );
     }
   });
-})
+});
 
 
 app.listen(port, () => {

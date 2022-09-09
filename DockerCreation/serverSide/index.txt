@@ -20,6 +20,10 @@ let provider = new anchor.AnchorProvider(connection, nodeWallet, {commitment: "f
 let program = new Program( IDL , "::::PROGRAM_ID", provider);
 let eventParser = new EventParser( new PublicKey("::::PROGRAM_ID"), program.coder);
 
+const sleep = (time: number) => {
+    return new Promise((resolve) => setTimeout(resolve, Math.ceil(time * 1000)));
+};
+
 async function getSlotDetails(_commitment: string, _slot: number): Promise<string[]> {
     var data = JSON.stringify({
         "jsonrpc": "2.0",
@@ -75,7 +79,8 @@ const getEventObject = async(slot: number) => {
             handleEvents(eventObj)
         }
         slot += 1;
+        await sleep(1);
     }
 }
 
-getEventObject(160272135);
+getEventObject(::::START_SLOT);
