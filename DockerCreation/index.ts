@@ -26,6 +26,18 @@ async function verifyContainer(projid : string) {
   }
 }
 
+async function verifyApolloContainer(projid: string) {
+  let exists = execSync("sudo docker container ls -a -f name=^/" + projid + "_apollo$").toString()
+  if (exists.trim().split("\n").length >1) {
+    let temp = exists.split("\n")[1].split("  ").map((x : string) => x.trim()).filter((x : string) => x != "")
+    if (temp[4].split(" ")[0] != "Exited") {
+      await execSync("sudo docker kill " + projid+"_apollo")
+    }
+    await execSync("sudo docker rm " + projid+"_apollo")
+    await execSync("sudo docker image prune -a -f")
+  }
+}
+
 
 app.post('/indexer' , async function (request: Request, response: Response, next: NextFunction) {
   let user : string = request.body.user;
@@ -105,6 +117,8 @@ app.post('/apollo',async function (request: Request, response: Response, next: N
   let name = indexerYAML.solName
   const PROJECTID = projid;
 
+  await verifyApolloContainer(projid);
+
   let data = ""
 
   const dataTypes = {
@@ -117,7 +131,7 @@ const imports = `const { ApolloServer, gql } = require("apollo-server");
 const { unmarshall } = require("@aws-sdk/util-dynamodb");
 const { DynamoDBClient, ScanCommand } = require("@aws-sdk/client-dynamodb");
 
-const client = new DynamoDBClient({ region: "us-east-2" });\n`;
+const client = new DynamoDBClient({ region: "ap-southeast-2" });\n`;
 
 data += imports;
 
