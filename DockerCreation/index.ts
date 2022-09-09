@@ -8,6 +8,10 @@ const axios = require('axios');
 
 const app = express();
 const port = 3000;
+
+let lastUsedPort = 3999;
+let portMap = {};
+
 app.use(bodyParser.json())
 
 async function verifyContainer(projid : string) {
@@ -18,7 +22,7 @@ async function verifyContainer(projid : string) {
       await execSync("sudo docker kill " + projid)
     }
     await execSync("sudo docker rm " + projid)
-    await execSync("sudo docker rmi $(sudo docker images | grep '"+ projid +"')")
+    await execSync("sudo docker image prune -a -f")
   }
 }
 
@@ -96,6 +100,7 @@ app.post('/apollo',async function (request: Request, response: Response, next: N
   let indexerYAML =  yaml.load(result.data)
   result = await axios.get(link + "entities.yaml")
   let docs =  yaml.load(result.data)
+
   
   let name = indexerYAML.solName
   const PROJECTID = projid;
@@ -177,9 +182,18 @@ let server = `const server = new ApolloServer({
     resolvers,
 });
 
-server.listen().then(({ url }) => {\n\t`;
+server.listen({port:PORT}).then(({ url }) => {\n\t`;
 server += "console.log(`🚀  Server ready at ${url}`);\n});";
 
+let _port = lastUsedPort + 1;
+if(projid in portMap){
+  _port = portMap[projid];
+} else {
+  portMap[projid] = _port;
+  lastUsedPort += 1;
+}
+
+server = server.replace("PORT",_port.toString());
 console.log(server);
 data+=server;
 
@@ -188,8 +202,8 @@ await fs.writeFile("./index.js", data, function (err) {
       throw err 
     } else {
       // RUNNING DOCKER CONTAINER
-      execSync("sudo docker build -q -f Dockerfile.apollo -t " + projid + ":latest .");
-      execSync("sudo docker run -d --name " + projid + " " + projid + ":latest");
+      execSync("sudo docker build -q -f Dockerfile.apollo -t " + projid + "_apollo:latest .");
+      execSync("sudo docker run -d -p "+_port+":"+_port+" --name " + projid + "_apollo " + projid + "_apollo:latest");
 
       response.status(200).send(
         {
