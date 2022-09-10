@@ -1,6 +1,7 @@
 // FUNCTION TO LOAD AN ENTITY FROM PRIMARY KEY
 
 const AWS = require('aws-sdk');
+const { unmarshall } = require("@aws-sdk/util-dynamodb");
 AWS.config.update({region: 'ap-southeast-2'});
 var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
 
@@ -50,7 +51,7 @@ export async function loader(entityName : string,primId : any, primName : string
     console.log("load completed");
     
     if (data.Item) {
-        return data.Item;
+        return unmarshall(data.Item);
     } else {
         return null;
     }

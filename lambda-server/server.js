@@ -434,6 +434,7 @@ async function updateProject(authCode, gh, branch = "") {
         await ddb.updateItem(params).promise();
         
     } catch (error) {
+        console.log("Update Project",error);
         return error.message
     }
 }

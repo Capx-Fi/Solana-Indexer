@@ -98,6 +98,7 @@ app.post('/indexer' , async function (request: Request, response: Response, next
       data += "RUN npm i js-yaml\n"
       data += "RUN npm i axios\n"
       data += "RUN npm i aws-sdk\n"
+      data += "RUN npm i @aws-sdk/util-dynamodb\n"
       data += "COPY ./serverSide ./serverSide\n"
       data += "WORKDIR /home/node/app/" + repo + "/serverSide\n"
       data += "RUN ts-node ./generatorMain.ts\n"
@@ -146,7 +147,7 @@ app.post('/indexer' , async function (request: Request, response: Response, next
       }
     }
   } catch (err) {
-    console.log("Indexer Error",err.stderr.toString());
+    console.log("Indexer Error",err);
     response.status(406).send({
       status: "Error",
       error: err.stderr.toString(),
