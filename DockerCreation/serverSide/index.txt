@@ -35,20 +35,44 @@ var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
 async function getBlockDetails(slot:number): Promise<string[]> {
     let logs : string[] = [];
     var params = {
-        TableName: '::::NETWORK-blocks',
-        Key: {
-          'slot': {N: slot.toString()}
-        },
+        RequestItems: {
+            '::::NETWORK-blocks': {
+                Keys:[ 
+                    {'slot': {N: slot.toString()}},
+                    {'slot': {N: (slot+1).toString()}},
+                    {'slot': {N: (slot+2).toString()}},
+                    {'slot': {N: (slot+3).toString()}},
+                    {'slot': {N: (slot+4).toString()}},
+                    {'slot': {N: (slot+5).toString()}},
+                    {'slot': {N: (slot+6).toString()}},
+                    {'slot': {N: (slot+7).toString()}},
+                    {'slot': {N: (slot+8).toString()}},
+                    {'slot': {N: (slot+9).toString()}},
+                    {'slot': {N: (slot+10).toString()}},
+                    {'slot': {N: (slot+11).toString()}},
+                    {'slot': {N: (slot+12).toString()}},
+                    {'slot': {N: (slot+13).toString()}},
+                    {'slot': {N: (slot+14).toString()}},
+                    {'slot': {N: (slot+15).toString()}},
+                    {'slot': {N: (slot+16).toString()}},
+                    {'slot': {N: (slot+17).toString()}},
+                    {'slot': {N: (slot+18).toString()}},
+                    {'slot': {N: (slot+19).toString()}},
+                    {'slot': {N: (slot+20).toString()}},
+                ],
+            }
+        }
     };
     // Call DynamoDB to read the item from the table
     try {
-        let data = await ddb.getItem(params).promise();
-        console.log("Success");
-        data.Item?.blockLogs.L?.map((log: any) => {
-            if (log.S) {
-                logs.push(log.S);
-            }
-        })
+        let data = await ddb.batchGetItem(params).promise();
+        data.Responses['::::NETWORK-blocks'].forEach(function(element, index, array) {
+            element?.blockLogs.L?.map((log: any) => {
+                if (log.S) {
+                    logs.push(log.S);
+                }
+            })
+        });
     } catch (error: any) {
         console.log("Error", error);
     }
@@ -108,7 +132,7 @@ const getEventObject = async(slot: number) => {
             }
             handleEvents(eventObj)
         }
-        slot += 1;
+        slot += 20;
         // await sleep(2);
     }
 }
