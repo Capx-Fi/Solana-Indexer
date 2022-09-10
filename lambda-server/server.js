@@ -302,10 +302,11 @@ async function updateProject(authCode, gh, branch = "") {
         
         // DELETE OLD ENTITIES IF ANY
         let oldEntityList = indexer.Item.entities.L
+        console.log("Delete Old Entities",oldEntityList);
         for (let index = 0; index < oldEntityList.length; index++) {
             const element = oldEntityList[index];
             let params = {
-                "TableName": projid + "_" + element,
+                "TableName": projid + "_" + element.S,
             }
             await ddb.deleteTable(params).promise();
             await ddb.waitFor("tableNotExists",params).promise()
@@ -340,9 +341,32 @@ async function updateProject(authCode, gh, branch = "") {
         
         try {
         // CREATE DOCKER CONTAINER
-        // CALL INDEXER WITH USER , REPO , BRANCH AND PROJID
+        let indexerData = JSON.stringify({
+            "user": user,
+            "repo": repo,
+            "branch": branch,
+            "projid": projid
+        });
+        let indexer = await axios.post("http://localhost:3000/indexer", indexerData);
+        if (indexer.data.status === "success"){
+            console.log("Indexer Up & Indexing - ProjectId:", projid)
+        } else {
+            return "Failed to start Indexer";
+        }
         // ERROR CHECKING 
         // CALL APOLLO WITH USER , REPO , BRANCH PROJID AND PORT
+        let apolloData = JSON.stringify({
+            "user": user,
+            "repo": repo,
+            "branch": branch,
+            "projid": projid
+        });
+        let apollo = await axios.post("http://localhost:3000/apollo", apolloData);
+        if (apollo.data.status === "success"){
+            console.log("Apollo Query Engine Ready - ProjectId:", projid)
+        } else {
+            return "Failed to start Query Engine";
+        }
         // ERROR CHECK
         } catch (error) {
             if (indexer.Item.github.length > 0) {
