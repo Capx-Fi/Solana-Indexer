@@ -1,3 +1,17 @@
+import {
+	handleU64Event,
+	handleStringEvent,
+	handlePubkeyEvent,
+	handleU8Event,
+} from '../src/mapping';
+
+import {
+	U64Event,
+	StringEvent,
+	PubkeyEvent,
+	U8Event,
+} from './Interfaces';
+
 import * as anchor from "@project-serum/anchor";
 import {
     Program,
@@ -20,9 +34,12 @@ let provider = new anchor.AnchorProvider(connection, nodeWallet, {commitment: "f
 let program = new Program( IDL , "::::PROGRAM_ID", provider);
 let eventParser = new EventParser( new PublicKey("::::PROGRAM_ID"), program.coder);
 
-const sleep = (time: number) => {
-    return new Promise((resolve) => setTimeout(resolve, Math.ceil(time * 1000)));
-};
+function sleep(ms) {
+    return new Promise(resolve => setTimeout(resolve, ms));
+}
+
+let logs : Map<number,string[]> = new Map()
+let recSlot = ::::START_SLOT
 
 // AWS Config
 import * as AWS from "aws-sdk";
@@ -32,109 +49,86 @@ AWS.config.update({region: 'us-east-1'});
 // Create the DynamoDB service object
 var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
 
-async function getBlockDetails(slot:number): Promise<string[]> {
-    let logs : string[] = [];
-    var params = {
-        RequestItems: {
-            '::::NETWORK-blocks': {
-                Keys:[ 
-                    {'slot': {N: slot.toString()}},
-                    {'slot': {N: (slot+1).toString()}},
-                    {'slot': {N: (slot+2).toString()}},
-                    {'slot': {N: (slot+3).toString()}},
-                    {'slot': {N: (slot+4).toString()}},
-                    {'slot': {N: (slot+5).toString()}},
-                    {'slot': {N: (slot+6).toString()}},
-                    {'slot': {N: (slot+7).toString()}},
-                    {'slot': {N: (slot+8).toString()}},
-                    {'slot': {N: (slot+9).toString()}},
-                    {'slot': {N: (slot+10).toString()}},
-                    {'slot': {N: (slot+11).toString()}},
-                    {'slot': {N: (slot+12).toString()}},
-                    {'slot': {N: (slot+13).toString()}},
-                    {'slot': {N: (slot+14).toString()}},
-                    {'slot': {N: (slot+15).toString()}},
-                    {'slot': {N: (slot+16).toString()}},
-                    {'slot': {N: (slot+17).toString()}},
-                    {'slot': {N: (slot+18).toString()}},
-                    {'slot': {N: (slot+19).toString()}},
-                    {'slot': {N: (slot+20).toString()}},
-                ],
-            }
+async function getBlockDetails() {
+    let flag = true
+    while (flag) {
+        populateLogs(recSlot)
+        recSlot += 100
+        if (logs.size > 10000) {
+            await sleep(1000)
+        } else {
+            await sleep(150)
         }
-    };
-    // Call DynamoDB to read the item from the table
-    try {
-        let data = await ddb.batchGetItem(params).promise();
-        data.Responses['::::NETWORK-blocks'].forEach(function(element, index, array) {
-            element?.blockLogs.L?.map((log: any) => {
-                if (log.S) {
-                    logs.push(log.S);
-                }
-            })
-        });
-    } catch (error: any) {
-        console.log("Error", error);
     }
-    return logs;
+    
 }
 
-// async function getSlotDetails(_commitment: string, _slot: number): Promise<string[]> {
-//     var data = JSON.stringify({
-//         "jsonrpc": "2.0",
-//         "id": 1,
-//         "method": "getBlock",
-//         "params": [
-//             _slot,
-//           {
-//             "encoding": "jsonParsed",
-//             "transactionDetails": "full",
-//             "rewards": false,
-//             "commitment": _commitment
-//           }
-//         ]
-//     });
-//     var config = {
-//         method: 'post',
-//         url: "::::CLUSTER_URL",
-//         headers: { 
-//           'Content-Type': 'application/json'
-//         },
-//         data : data
-//     };
-//     return axios(config)
-//     .then(function (response: any) {
-//         // console.log(response);
-//         let logs: string[] = [];
-//         response?.data?.result?.transactions.map( async(transaction: any) => {
-//             logs.push(transaction?.meta?.logMessages);
-//         });
-//         logs = logs.join(",").split(",");
-//         return logs;
-//     })
-//     .catch(function (error: any) {
-//         console.log(error);
-//     });
-// }
-
+async function populateLogs(slot) {
+    try {
+        let keys : { slot: { N: string; }; }[] = []
+        for (let index = 0; index < 100; index++) {
+            keys.push({'slot': {N: (slot + index).toString()}})
+            
+        }
+        var params = {
+            RequestItems: {
+                '::::NETWORK-blocks': {
+                    Keys: keys,
+                }
+            }
+        };
+        let data = await ddb.batchGetItem(params).promise();
+        
+        data.Responses!['::::NETWORK-blocks'].forEach(function(element, index, array) {
+            let temp : string[] = []
+            
+            element["blockLogs"].L?.map((log: any) => {
+                if (log.S) {
+                    temp.push(log.S);
+                    
+                }
+            })
+            logs.set(parseInt(element["slot"].N!),temp)
+        });
+    } catch (error) {
+        console.log(error);
+        
+    }
+}
 
 const getEventObject = async(slot: number) => {
     let flag = true;
     while(flag){
-        console.log("Slot",slot);
-        let logs = await getBlockDetails(slot);
-        // let logs = await getSlotDetails("finalized",slot);
-        for (const _event of eventParser.parseLogs(logs)){
-            console.log("Event",_event);
-            let eventObj = {
-                 name : _event.name,
-                 params : _event.data
-            }
-            handleEvents(eventObj)
+        console.log("Slot ",slot);
+        while (logs.size < 1000) {
+            console.log("WAITING!");
+            console.log(logs.size);
+            await sleep(1000)
         }
-        slot += 20;
-        // await sleep(2);
+        // let logs = await getSlotDetails("finalized",slot);
+        
+        if (logs.get(slot) === undefined) {
+            console.log("waiting");
+            await sleep(1000)
+        } else {
+            console.log("processing");
+            
+            for (const _event of eventParser.parseLogs(logs.get(slot)!)) {
+                console.log("Event",_event);
+                let eventObj = {
+                     name : _event.name,
+                     params : _event.data
+                }
+                await handleEvents(eventObj)
+            }
+            logs.delete(slot)
+            console.log(slot);
+            
+            slot += 1;
+            // await sleep(20000);
+        }
     }
 }
 
 getEventObject(::::START_SLOT);
+getBlockDetails()

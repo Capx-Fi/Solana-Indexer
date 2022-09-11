@@ -287,12 +287,12 @@ indexString = replaceAll(indexString, "::::CLUSTER_URL", clusterUrl)
 logger.write(indexString)
 logger.write("\n\n\n")
 
-logger.write("function handleEvents(event : {name : string , params : object}) : void {")
+logger.write("async function handleEvents(event : {name : string , params : object}) : void {")
 logger.write("\n\tswitch (event.name) {")
 for (let index = 0; index < eventList.length; index++) {
     const element = eventList[index];
     logger.write("\n\t\tcase \""+element["name"]+"\":")
-    logger.write("\n\t\t\t"+element["handler"]+"(event[\"params\"] as "+ element["name"].replace(/\s/g, "") + ");")
+    logger.write("\n\t\t\tawait "+element["handler"]+"(event[\"params\"] as "+ element["name"].replace(/\s/g, "") + ");")
     logger.write("\n\t\t\tbreak;")
 }
 logger.write("\n\t}")
