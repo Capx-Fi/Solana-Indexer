@@ -96,9 +96,43 @@ async function populateLogs(slot) {
     }
 }
 
+async function getSlot(_network: string, _commitment: string) {
+    var data = JSON.stringify({
+        "jsonrpc": "2.0",
+        "id": 1,
+        "method": "getSlot",
+        "params": [
+          {
+            "commitment": _commitment
+          }
+        ]
+    });
+    var config = {
+        method: 'post',
+        url: "https://solana-devnet.g.alchemy.com/v2/FN-j_DEecftJ-VAtcMzD72gzueeb82Mz",
+        headers: { 
+          'Content-Type': 'application/json'
+        },
+        data : data
+    };
+    return axios(config)
+    .then(function (response) {
+        return response.data.result;
+    })
+    .catch(function (error) {
+        console.log(error);
+    });
+}
+
 const getEventObject = async(slot: number) => {
     let flag = true;
     while(flag){
+        let x = await getSlot("devnet", "finalized");
+        if(x - slot < 200 && x - slot > 50){
+            await sleep(2)
+        } else if (x - slot < 50) {
+            await sleep(5)
+        }
         console.log("Slot ",slot);
         while (logs.size < 1000) {
             console.log("WAITING!");
