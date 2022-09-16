@@ -287,7 +287,7 @@ indexString = replaceAll(indexString, "::::CLUSTER_URL", clusterUrl)
 logger.write(indexString)
 logger.write("\n\n\n")
 
-logger.write("async function handleEvents(event : {name : string , params : object}) : void {")
+logger.write("async function handleEvents(event : {name : string , params : object}) : Promise<void> {")
 logger.write("\n\tswitch (event.name) {")
 for (let index = 0; index < eventList.length; index++) {
     const element = eventList[index];

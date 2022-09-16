@@ -1,17 +1,3 @@
-import {
-	handleU64Event,
-	handleStringEvent,
-	handlePubkeyEvent,
-	handleU8Event,
-} from '../src/mapping';
-
-import {
-	U64Event,
-	StringEvent,
-	PubkeyEvent,
-	U8Event,
-} from './Interfaces';
-
 import * as anchor from "@project-serum/anchor";
 import {
     Program,
@@ -39,6 +25,7 @@ function sleep(ms) {
 }
 
 let logs : Map<number,string[]> = new Map()
+let unprocessedLogs : number[] = []
 let recSlot = ::::START_SLOT
 
 // AWS Config
@@ -52,19 +39,27 @@ var ddb = new AWS.DynamoDB({apiVersion: '2012-08-10'});
 async function getBlockDetails() {
     let flag = true
     while (flag) {
-        populateLogs(recSlot)
-        recSlot += 100
-        if (logs.size > 10000) {
-            await sleep(1000)
-        } else {
-            await sleep(150)
+        let x = await getSlot("devnet", "finalized");
+        if (x - recSlot < 1000 && x - recSlot > 500) {
+            await sleep(4000)
+        } else if (x - recSlot < 500) {
+            await sleep(10000)
+        }
+        while (x - recSlot > 1000) {
+            await populateLogs(recSlot)
+            recSlot += 100
+            if (logs.size > 10000) {
+                await sleep(1000)
+            } else {
+                await sleep(150)
+            }
         }
     }
-    
 }
 
 async function populateLogs(slot) {
     try {
+        let slots : number[] = []
         let keys : { slot: { N: string; }; }[] = []
         for (let index = 0; index < 100; index++) {
             keys.push({'slot': {N: (slot + index).toString()}})
@@ -89,7 +84,9 @@ async function populateLogs(slot) {
                 }
             })
             logs.set(parseInt(element["slot"].N!),temp)
+            slots = slots.filter((item) => item !== parseInt(element["slot"].N!))
         });
+        unprocessedLogs = unprocessedLogs.concat(slots)
     } catch (error) {
         console.log(error);
         
@@ -127,21 +124,13 @@ async function getSlot(_network: string, _commitment: string) {
 const getEventObject = async(slot: number) => {
     let flag = true;
     while(flag){
-        let x = await getSlot("devnet", "finalized");
-        if(x - slot < 200 && x - slot > 50){
-            await sleep(2)
-        } else if (x - slot < 50) {
-            await sleep(5)
-        }
-        console.log("Slot ",slot);
-        while (logs.size < 1000) {
-            console.log("WAITING!");
-            console.log(logs.size);
-            await sleep(1000)
-        }
-        // let logs = await getSlotDetails("finalized",slot);
-        
-        if (logs.get(slot) === undefined) {
+        console.log("Slot ",slot);        
+        while (slot < recSlot) {
+            if (logs.get(slot) === undefined) {
+                if (unprocessedLogs.includes(slot)) {
+                    unprocessedLogs = unprocessedLogs.filter((item) => item !== slot)
+                    slot+= 1
+                }
             console.log("waiting");
             await sleep(1000)
         } else {
@@ -159,8 +148,9 @@ const getEventObject = async(slot: number) => {
             console.log(slot);
             
             slot += 1;
-            // await sleep(20000);
         }
+        }
+        await sleep(5000)
     }
 }
 
